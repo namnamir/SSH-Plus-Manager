@@ -183,7 +183,8 @@ _format_last_seen() {
 }
 
 _do_display() {
-	clear
+	# Clear screen and move cursor to home so refresh doesn't leave ghost lines
+	printf '\033[2J\033[H'
 	_userlist=$(awk -F: '$3>=1000 {print $1}' /etc/passwd 2>/dev/null | grep -v nobody)
 	_tmp_usage=$(mktemp 2>/dev/null || echo "/tmp/sshmon_usage_$$")
 	_tmp_lastseen=$(mktemp 2>/dev/null || echo "/tmp/sshmon_lastseen_$$")
@@ -292,14 +293,20 @@ _do_display() {
 			last_str=$(_format_last_seen "$last_epoch")
 		fi
 
-		yellow_code=$(get_color_code "yellow")
-		blue_code=$(get_color_code "blue")
-		reset_code=$(get_reset_code)
-
-		line=$(printf '%b%s %-10s %-5s %-9s %-12s %-12s %-9s %-6s %-18s %-14s%b' \
-			"$yellow_code" "$icon" "$user" "$conex/$s2ssh" "$timerr" "$traffic_str" "$total_str" "$tot_hms" "$days" "$last_str" "$pass" "$reset_code")
+		# Per-column colors for readability
+		_ccyan=$(get_color_code "cyan")
+		_cgreen=$(get_color_code "green")
+		_cyellow=$(get_color_code "yellow")
+		_cwhite=$(get_color_code "white")
+		_cmagenta=$(get_color_code "magenta")
+		_cblue=$(get_color_code "blue")
+		_reset=$(get_reset_code)
+		line=$(printf '%b%s %b%-10s%b %b%-5s%b %b%-9s%b %b%-12s%b %b%-12s%b %b%-9s%b %b%-6s%b %b%-18s%b %b%-14s%b' \
+			"$_cwhite" "$icon" "$_ccyan" "$user" "$_reset" "$_cgreen" "$conex/$s2ssh" "$_reset" "$_cwhite" "$timerr" "$_reset" \
+			"$_ccyan" "$traffic_str" "$_reset" "$_cyellow" "$total_str" "$_reset" "$_cwhite" "$tot_hms" "$_reset" \
+			"$_cmagenta" "$days" "$_reset" "$_cblue" "$last_str" "$_reset" "$_cwhite" "$pass" "$_reset")
 		_rows+=("$line")
-		_rows+=("${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}")
+		_rows+=("${_cblue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${_reset}")
 	done
 
 	[[ -f "$_tmp_usage" ]] && mv "$_tmp_usage" "$USAGELOG" 2>/dev/null
@@ -307,23 +314,17 @@ _do_display() {
 	[[ -f "$_tmp_lastseen" ]] && mv "$_tmp_lastseen" "$LASTSEENLOG" 2>/dev/null
 	rm -f "${_tmp_lastseen}.n" 2>/dev/null
 
-	# Top stats block
+	# Build entire screen in one go to avoid lag/ghost lines on refresh
 	yellow_code=$(get_color_code "yellow")
-	green_code=$(get_color_code "green")
-	red_code=$(get_color_code "red")
 	white_code=$(get_color_code "white")
 	reset_code=$(get_reset_code)
 	sum_down=$(_fmt_bytes "$sum_r")
 	sum_up=$(_fmt_bytes "$sum_w")
-	echo -e "${yellow_code}Total: ${white_code}${n_total} users${yellow_code}  |  🟢 ${n_online}  🔴 ${n_offline}  🟠 ${n_expired}  🟡 ${n_expiring}  |  Total ↓${sum_down}  ↑${sum_up}${reset_code}"
-	echo ""
-	print_header " User      Conn  Time      Down/Up      Total↓/↑    TotalTime  Days   Last (datetime)  Password   "
-	echo ""
-	for row in "${_rows[@]}"; do
-		echo -e "$row"
-	done
-	echo ""
-	color_echo_n "Press Enter to return to menu (auto-refresh 10s)" "yellow"
+	_body="${yellow_code}Total: ${white_code}${n_total} users${yellow_code}  |  🟢 ${n_online}  🔴 ${n_offline}  ⚪ ${n_expired}  🟡 ${n_expiring}  |  Total ↓${sum_down}  ↑${sum_up}${reset_code}"$'\n\n'
+	_body+="$(print_header " User      Conn  Time      Down/Up      Total↓/↑    TotalTime  Days   Last (datetime)  Password   ")"$'\n\n'
+	for row in "${_rows[@]}"; do _body+="$row"$'\n'; done
+	_body+=$'\n'"${yellow_code}Press Enter to return to menu (auto-refresh 10s)${reset_code}"
+	echo -e "$_body"
 }
 
 # Auto-refresh loop: redraw every 10s, exit on Enter

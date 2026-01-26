@@ -66,9 +66,6 @@ else
     fi
 fi
 
-# Clear the screen for a clean start
-clear
-
 # Check if script is running as root user
 # Root privileges are required to install system packages and modify system files
 if [[ "$(whoami)" != "root" ]]; then
@@ -256,7 +253,6 @@ echo ""
 # Check if user database already exists
 # If it exists, ask user if they want to keep it or create a new one
 if [[ -f "$HOME/users.db" ]]; then
-    clear
     blue_code=$(get_color_code "blue")
     reset_code=$(get_reset_code)
     echo ""
@@ -284,7 +280,6 @@ if [[ "$optiondb" = '2' ]]; then
     awk -F : '$3 >= 500 { print $1 " 1" }' /etc/passwd | grep -v '^nobody' > "$HOME/users.db"
 fi
 # Start system update process
-clear
 print_header " WAITING FOR INSTALLATION"
 echo ""
 echo ""
@@ -309,7 +304,6 @@ fun_attlist() {
 # Run system update with progress bar
 fun_bar 'fun_attlist'
 
-clear
 echo ""
 color_echo "Installing required packages..." "green"
 color_echo "Please wait." "yellow"
@@ -358,7 +352,6 @@ if [[ -f "/usr/sbin/ufw" ]]; then
     ufw allow 8080/tcp > /dev/null 2>&1 # Alternative HTTP port
 fi
 
-clear
 echo ""
 color_echo "Finalizing installation..." "green"
 color_echo "Configuring components." "yellow"
@@ -372,7 +365,6 @@ fun_bar "$_Ink/list $_lnk $_Ink $_1nk $key"
 [[ -d /etc/SSHPlus ]] || mkdir -p /etc/SSHPlus
 [[ -s /bin/version ]] && cp /bin/version /etc/SSHPlus/version 2>/dev/null
 
-clear
 echo ""
 cd "$HOME" || exit 1
 
