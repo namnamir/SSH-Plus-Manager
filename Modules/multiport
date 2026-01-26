@@ -32,6 +32,16 @@ check_systemd() {
     return 0
 }
 
+# Function to ensure required SSH directories exist
+ensure_ssh_directories() {
+    # Create privilege separation directory if missing
+    if [[ ! -d "/run/sshd" ]]; then
+        mkdir -p /run/sshd
+        chmod 0755 /run/sshd
+    fi
+    return 0
+}
+
 # Function to get current SSH ports from sshd_config
 get_current_ports() {
     # Get all Port lines (including those with leading spaces)
@@ -85,6 +95,9 @@ add_port_sshd() {
         # Add at the end
         echo "Port $port" >> /etc/ssh/sshd_config
     fi
+    
+    # Ensure required SSH directories exist before validation
+    ensure_ssh_directories
     
     # Validate configuration immediately after adding
     local validation_output=$(sshd -t 2>&1)
@@ -252,6 +265,9 @@ main_menu() {
                     continue
                 fi
                 
+                # Ensure required SSH directories exist
+                ensure_ssh_directories
+                
                 if add_port_sshd "$port"; then
                     if check_systemd; then
                         configure_systemd_socket
@@ -331,6 +347,9 @@ main_menu() {
                     sleep 2
                     continue
                 fi
+                
+                # Ensure required SSH directories exist
+                ensure_ssh_directories
                 
                 # Create backup of sshd_config before making changes
                 local backup_file="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
