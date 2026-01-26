@@ -49,10 +49,10 @@ while read user; do
 			white_code=$(get_color_code "white")
 			green_code=$(get_color_code "green")
 			reset_code=$(get_reset_code)
-			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}"
-			datanormal="${red_code}$(date -d"$expire" '+%d/%m/%Y')${reset_code}"
+			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}${reset_code}"
+			datanormal="$(date -d"$expire" '+%d/%m/%Y')"
 			expired="${red_code}WON${reset_code}"
-			printf '%-62s%-20s%b\n' "$_user" "$datanormal" "$expired"
+			echo -e "${_user}  ${datanormal}  ${expired}"
 			echo "exp" > /tmp/exp
 		else
 			# Use color codes for valid users
@@ -62,10 +62,10 @@ while read user; do
 			green_code=$(get_color_code "green")
 			yellow_code=$(get_color_code "yellow")
 			reset_code=$(get_reset_code)
-			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}"
-			datanormal="${yellow_code}$(date -d"$expire" '+%d/%m/%Y')${reset_code}"
+			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}${reset_code}"
+			datanormal="$(date -d"$expire" '+%d/%m/%Y')"
 			ative="${green_code}VALID${reset_code}"
-			printf '%-62s%-20s%b\n' "$_user" "$datanormal" "$ative"
+			echo -e "${_user}  ${datanormal}  ${ative}"
 		fi
 	fi
 	_userPass+="\n${_oP}:${user}"

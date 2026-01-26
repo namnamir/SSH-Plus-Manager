@@ -46,7 +46,7 @@ while read _user; do
 	
 	suser="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$_user${reset_code}"
 	ssenha="${yellow_code}Password${white_code}: $_senha${reset_code}"
-    printf '%-60s%b\n' "$suser" "$ssenha"
+	echo -e "${suser}  ${ssenha}"
 	_userPass+="\n${_oP}:${_user}"
 done <<< "${_userT}"
 num_user=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)

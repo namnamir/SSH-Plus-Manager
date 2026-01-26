@@ -48,7 +48,7 @@ else
 		
 		l_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$_user${reset_code}"
 		lim="${yellow_code}Limit${white_code}: $limit${reset_code}"
-        printf '%-65s%b\n' "$l_user" "$lim"
+		echo -e "${l_user}  ${lim}"
 		_userPass+="\n${_oP}:${_user}"
 	done <<< "${_userT}"
 	echo ""
