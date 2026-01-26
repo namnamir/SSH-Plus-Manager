@@ -62,5 +62,12 @@ for user in $(awk -F: '{print $1}' /etc/passwd); do
 	fi
 done
 echo '0' > /etc/SSHPlus/Exp
-tput sgr0 
+tput sgr0
 echo ""
+menu_option "0" "BACK TO MENU" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
+echo ""
+color_echo_n "Select option [0/00]: " "green"
+read -r resp
+[[ "$resp" == "00" ]] && exit 99
+exit 0

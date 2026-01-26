@@ -181,6 +181,9 @@ menu() {
 		color_echo_n "LINK: " "green"
 		color_echo "$lnk" "cyan"
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
+		echo ""
+		color_echo_n "Press ENTER to return to menu..." "yellow"
+		read -r
 		rm -rf $HOME/speed $HOME/speed_png $HOME/speed_down $HOME/speed_upl $HOME/speed_lnk 2>/dev/null
 	}
 	# Toggle auto-execution of menu on login
@@ -196,7 +199,7 @@ menu() {
 			echo ""
 			color_echo "AUTO EXECUTION OFF!" "red"
 			sleep 1.5s
-			menu2
+			menu
 		else
 			clear
 			color_echo "ACTIVATING AUTO RUN" "green"
@@ -209,7 +212,7 @@ menu() {
 			echo ""
 			color_echo "AUTO RUN ON!" "green"
 			sleep 1.5s
-			menu2
+			menu
 		fi
 	}
 
@@ -227,7 +230,7 @@ menu() {
 		else
 			color_echo "Reboot cancelled." "green"
 			sleep 2
-			menu2
+			menu
 		fi
 	}
 
@@ -395,28 +398,47 @@ menu() {
 		sleep 2
 	}
 
-	# Update script: fetch all manager files from repository and copy to local paths
+	# Update script: check version, then fetch all manager files from repository and copy to local paths
 	attscript() {
 		print_header "           UPDATE SCRIPT                "
 		echo ""
-		warning_msg "This will download all manager files from the repository and overwrite local copies."
+		local repo_url
+		if [[ -f /etc/SSHPlus/repo_url ]] && [[ -s /etc/SSHPlus/repo_url ]]; then
+			repo_url=$(tr -d '\r\n' < /etc/SSHPlus/repo_url)
+		else
+			repo_url="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
+		fi
+		local local_ver remote_ver
+		local_ver=$(cat /etc/SSHPlus/version 2>/dev/null || cat /bin/version 2>/dev/null)
+		[[ -z "$local_ver" ]] && local_ver="0"
+		remote_ver=$(wget -qO- --timeout=5 "$repo_url/version" 2>/dev/null | head -1 | tr -d '\r\n')
+		[[ -z "$remote_ver" ]] && remote_ver="$local_ver"
+		local need_update=""
+		if [[ -n "$remote_ver" ]] && [[ "$local_ver" != "$remote_ver" ]]; then
+			local latest; latest=$(printf '%s\n%s' "$local_ver" "$remote_ver" | sort -V 2>/dev/null | tail -1)
+			[[ "$latest" = "$remote_ver" ]] && need_update=1
+		fi
+		color_echo "  Current version: v${local_ver}" "cyan"
+		color_echo "  Latest version:  v${remote_ver}" "cyan"
+		echo ""
+		if [[ -z "$need_update" ]]; then
+			success_msg "Already up to date."
+			sleep 2
+			menu
+			return 0
+		fi
+		warning_msg "Update available. This will download all manager files from the repository and overwrite local copies."
 		color_echo_n "Continue? [y/N]: " "yellow"
 		read -r confirm
 		if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 			color_echo "Update cancelled." "green"
 			sleep 2
-			menu2
+			menu
 			return 0
-		fi
-		local repo_url
-		if [[ -f /etc/SSHPlus/repo_url ]] && [[ -s /etc/SSHPlus/repo_url ]]; then
-			repo_url=$(cat /etc/SSHPlus/repo_url | tr -d '\r\n')
-		else
-			repo_url="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
 		fi
 		[[ -d /etc/SSHPlus ]] || mkdir -p /etc/SSHPlus
 		local tmpdir="/tmp/sshplus_update_$$"
-		mkdir -p "$tmpdir" || { error_msg "Cannot create temp directory."; sleep 2; menu2; return 1; }
+		mkdir -p "$tmpdir" || { error_msg "Cannot create temp directory."; sleep 2; menu; return 1; }
 		color_echo "Fetching files from repository..." "green"
 		echo ""
 		local updated=0 failed=0
@@ -438,10 +460,12 @@ menu() {
 			fi
 		done
 		rm -rf "$tmpdir" 2>/dev/null
-		echo ""
 		if [[ $updated -gt 0 ]]; then
-			success_msg "Update finished: $updated file(s) updated."
+			echo "$remote_ver" > /etc/SSHPlus/version 2>/dev/null
+			echo "$remote_ver" > /bin/version 2>/dev/null
+			success_msg "Update finished: $updated file(s) updated. Version set to v${remote_ver}."
 		fi
+		echo ""
 		if [[ $failed -gt 0 ]]; then
 			warning_msg "$failed file(s) could not be updated (missing in repo or permission error)."
 		fi
@@ -450,7 +474,7 @@ menu() {
 		fi
 		color_echo "To use the new menu, run: menu" "cyan"
 		sleep 3
-		menu2
+		menu
 	}
 
 	# Remove script (uninstall)
@@ -601,6 +625,18 @@ menu() {
 		[[ -z "$_ports" ]] && _ports=$(netstat -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$4); print $4}' | sort -nu | tr '\n' ' ')
 		[[ -z "$_ports" ]] && _ports="N/A"
 
+		# Version check for update availability
+		_ver_repo="${_ver_repo:-https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main}"
+		[[ -f /etc/SSHPlus/repo_url ]] && [[ -s /etc/SSHPlus/repo_url ]] && _ver_repo=$(tr -d '\r\n' < /etc/SSHPlus/repo_url)
+		_ver_local=$(cat /etc/SSHPlus/version 2>/dev/null || cat /bin/version 2>/dev/null); [[ -z "$_ver_local" ]] && _ver_local="0"
+		_ver_remote=$(wget -qO- --timeout=3 "$_ver_repo/version" 2>/dev/null | head -1 | tr -d '\r\n')
+		[[ -z "$_ver_remote" ]] && _ver_remote="$_ver_local"
+		_ver_update=""
+		if [[ -n "$_ver_remote" ]] && [[ "$_ver_local" != "$_ver_remote" ]]; then
+			_latest=$(printf '%s\n%s' "$_ver_local" "$_ver_remote" | sort -V 2>/dev/null | tail -1)
+			[[ "$_latest" = "$_ver_remote" ]] && _ver_update="$_ver_remote"
+		fi
+
 		clear
 
 		blue_code=$(get_color_code "blue")
@@ -621,6 +657,10 @@ menu() {
 		printf "  ${red_code}Disk:${white_code} %s / %s (%s)${reset_code}\n" "$_disk_used" "$_disk_total" "$_disk_percent"
 		printf "  ${red_code}Network:${white_code} %s${reset_code}\n" "$_net_stats"
 		printf "  ${red_code}Used ports:${white_code} %s${reset_code}\n" "$_ports"
+		printf "  ${red_code}Version:${white_code} %s${reset_code}\n" "$_ver_local"
+		if [[ -n "$_ver_update" ]]; then
+			echo -e "  ${yellow_code}[!] Update available: v${_ver_update} — use [16] MORE → [24] UPDATE${reset_code}"
+		fi
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 		echo ""
 		echo -e "${red_code}[${cyan_code}01${red_code}] ${white_code}• ${yellow_code}CREATE USER ${red_code}            [${cyan_code}11${red_code}] ${white_code}• ${yellow_code}SPEEDTEST ${reset_code}"
@@ -678,12 +718,14 @@ menu() {
 		8 | 08)
 			clear
 			expcleaner
-			echo ""
-			sleep 3
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			;;
 		9 | 09)
 			clear
 			infousers
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			;;
 		10)
 			conexao
@@ -760,13 +802,11 @@ menu() {
 			clear
 			reiniciarservicos
 			sleep 5
-			menu
 			;;
 		18)
 			clear
 			senharoot
 			sleep 5
-			menu
 			;;
 		19)
 			autoexec

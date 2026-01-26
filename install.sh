@@ -425,6 +425,10 @@ echo ""
 # This script downloads and installs all the manager modules
 fun_bar "$_Ink/list $_lnk $_Ink $_1nk $key"
 
+# Persist installed version for update checks (menu reads /etc/SSHPlus/version or /bin/version)
+[[ -d /etc/SSHPlus ]] || mkdir -p /etc/SSHPlus
+[[ -s /bin/version ]] && cp /bin/version /etc/SSHPlus/version 2>/dev/null
+
 clear
 echo ""
 cd "$HOME" || exit 1
