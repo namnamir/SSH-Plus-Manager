@@ -10,6 +10,16 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 fi
 
 clear
+menu_option "1" "VIEW USER LIST" "red" "yellow"
+menu_option "0" "BACK TO MENU" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
+echo ""
+color_echo_n "Select option " "green"
+color_echo_n "[1/0/00]: " "white"
+read -r resp
+[[ "$resp" == "0" || "$resp" == "00" ]] && exit 0
+[[ -n "$resp" && "$resp" != "1" ]] && { echo ""; error_msg "Invalid option!"; sleep 2; exit 1; }
+clear
 # Use print_header function for colored header
 print_header " User                 Password               Limit         Validity "
 echo ""

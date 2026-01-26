@@ -96,71 +96,89 @@ menu() {
         }
         
         # Speedtest execution function
-        # Uses curl-based speedtest (no external dependencies)
+        # Prefers speedtest-cli or Ookla speedtest when installed; falls back to curl-based test
         fun_tst() {
-            # Size per test in MiB (must be < 50). Default: 25 MiB
-            local SIZE_MIB="${1:-25}"
+            local out_png="$HOME/speed_png" out_down="$HOME/speed_down" out_upl="$HOME/speed_upl" out_lnk="$HOME/speed_lnk"
+            echo "N/A" > "$out_png"; echo "N/A" > "$out_down"; echo "N/A" > "$out_upl"; echo "N/A" > "$out_lnk"
             
-            # Validate size parameter
-            if ! [[ "$SIZE_MIB" =~ ^[0-9]+$ ]] || (( SIZE_MIB < 1 || SIZE_MIB >= 50 )); then
-                SIZE_MIB=25
+            # 1) Try speedtest-cli (e.g. pip install speedtest-cli) - simple parseable output
+            if command -v speedtest-cli > /dev/null 2>&1; then
+                local raw
+                raw=$(speedtest-cli --simple 2>/dev/null) || true
+                if [[ -n "$raw" ]]; then
+                    echo "$raw" | awk -F': ' '/Ping/{gsub(/ ms/,"",$2); printf "%.2f ms\n", $2}' > "$out_png"
+                    echo "$raw" | awk -F': ' '/Download/{gsub(/ *Mbit\/s/,"",$2); printf "%.2f Mbps\n", $2+0}' > "$out_down"
+                    echo "$raw" | awk -F': ' '/Upload/{gsub(/ *Mbit\/s/,"",$2); printf "%.2f Mbps\n", $2+0}' > "$out_upl"
+                    echo "speedtest-cli" > "$out_lnk"
+                    [[ -s "$out_png" ]] || echo "N/A" > "$out_png"
+                    [[ -s "$out_down" ]] || echo "N/A" > "$out_down"
+                    [[ -s "$out_upl" ]] || echo "N/A" > "$out_upl"
+                    return 0
+                fi
             fi
             
-            # Check if curl is available
-            if ! command -v curl > /dev/null 2>&1; then
-                echo "N/A" > $HOME/speed_png
-                echo "N/A" > $HOME/speed_down
-                echo "N/A" > $HOME/speed_upl
-                echo "N/A" > $HOME/speed_lnk
+            # 2) Try Ookla speedtest (official CLI; often "speedtest" or "speedtest-go")
+            if command -v speedtest > /dev/null 2>&1; then
+                local json human
+                json=$(speedtest --accept-license -f json 2>/dev/null) || true
+                if [[ -n "$json" ]] && command -v jq > /dev/null 2>&1; then
+                    echo "$json" | jq -r '.ping.latency | tostring + " ms"' 2>/dev/null > "$out_png"
+                    echo "$json" | jq -r '.download.bandwidth | (. * 8 / 1000000 | tostring) + " Mbps"' 2>/dev/null > "$out_down"
+                    echo "$json" | jq -r '.upload.bandwidth | (. * 8 / 1000000 | tostring) + " Mbps"' 2>/dev/null > "$out_upl"
+                    echo "$json" | jq -r '.server.name // "Ookla"' 2>/dev/null > "$out_lnk"
+                    [[ -s "$out_png" ]] || echo "N/A" > "$out_png"
+                    [[ -s "$out_down" ]] || echo "N/A" > "$out_down"
+                    [[ -s "$out_upl" ]] || echo "N/A" > "$out_upl"
+                    return 0
+                fi
+                human=$(speedtest --accept-license -f human-readable 2>/dev/null) || true
+                if [[ -n "$human" ]]; then
+                    echo "$human" | awk -F': ' '/Latency/{gsub(/ ms/,""); printf "%.2f ms\n", $2}' > "$out_png"
+                    echo "$human" | awk -F': ' '/Download/{gsub(/ Mbps/,""); printf "%.2f Mbps\n", $2}' > "$out_down"
+                    echo "$human" | awk -F': ' '/Upload/{gsub(/ Mbps/,""); printf "%.2f Mbps\n", $2}' > "$out_upl"
+                    echo "Ookla" > "$out_lnk"
+                    [[ -s "$out_png" ]] || echo "N/A" > "$out_png"
+                    [[ -s "$out_down" ]] || echo "N/A" > "$out_down"
+                    [[ -s "$out_upl" ]] || echo "N/A" > "$out_upl"
+                    return 0
+                fi
+            fi
+            
+            # 3) Curl-based fallback: ping + download (Tele2) + upload (small POST to reduce httpbin issues)
+            if ! command -v curl > /dev/null 2>&1 || ! command -v awk > /dev/null 2>&1; then
                 return 1
             fi
-            
-            # Check if awk is available (needed for conversion)
-            if ! command -v awk > /dev/null 2>&1; then
-                echo "N/A" > $HOME/speed_png
-                echo "N/A" > $HOME/speed_down
-                echo "N/A" > $HOME/speed_upl
-                echo "N/A" > $HOME/speed_lnk
-                return 1
-            fi
-            
+            local SIZE_MIB=10
             local DL_URL="http://speedtest.tele2.net/${SIZE_MIB}MB.zip"
             local UL_URL="https://httpbin.org/post"
+            to_mbps() { awk '{ printf "%.2f\n", $1*8/1000000 }'; }
             
-            # Function to convert bytes/s to Mbps
-            to_mbps() {
-                awk '{ printf "%.2f\n", $1*8/1000000 }'
-            }
+            # Ping (average of 3 to 8.8.8.8)
+            if command -v ping > /dev/null 2>&1; then
+                local ping_ms
+                ping_ms=$(ping -c 3 -W 4 8.8.8.8 2>/dev/null | tail -1 | awk -F'/' '{print $5}' | tr -d ' ')
+                if [[ -n "$ping_ms" ]] && [[ "$ping_ms" =~ ^[0-9.]*$ ]]; then
+                    printf "%.2f ms\n" "$ping_ms" > "$out_png"
+                fi
+            fi
             
-            # Download speed test (Mb/s)
+            # Download (bytes/s from curl %{speed_download})
             local download_speed
-            download_speed=$(curl -s -o /dev/null -w "%{speed_download}\n" "$DL_URL" 2>/dev/null | to_mbps)
-            
-            # Upload speed test (Mb/s)
-            local upload_speed
-            upload_speed=$(dd if=/dev/zero bs=1M count="$SIZE_MIB" 2>/dev/null | \
-                curl -s -o /dev/null -w "%{speed_upload}\n" -X POST --data-binary @- "$UL_URL" 2>/dev/null | to_mbps)
-            
-            # Write results to files
-            # Ping is not available with this method, set to N/A
-            echo "N/A" > $HOME/speed_png
-            
-            # Format download speed
+            download_speed=$(curl -s -o /dev/null -w "%{speed_download}\n" --connect-timeout 15 --max-time 120 "$DL_URL" 2>/dev/null | to_mbps)
             if [[ -n "$download_speed" ]] && [[ "$download_speed" != "0.00" ]]; then
-                printf "%.2f Mbps\n" "$download_speed" > $HOME/speed_down
-            else
-                echo "N/A" > $HOME/speed_down
+                printf "%.2f Mbps\n" "$download_speed" > "$out_down"
             fi
             
-            # Format upload speed
+            # Upload (smaller 5MB to reduce timeouts/throttling on httpbin)
+            local upload_speed
+            upload_speed=$(dd if=/dev/zero bs=1M count=5 2>/dev/null | \
+                curl -s -o /dev/null -w "%{speed_upload}\n" -X POST --data-binary @- --connect-timeout 10 --max-time 60 "$UL_URL" 2>/dev/null | to_mbps)
             if [[ -n "$upload_speed" ]] && [[ "$upload_speed" != "0.00" ]]; then
-                printf "%.2f Mbps\n" "$upload_speed" > $HOME/speed_upl
-            else
-                echo "N/A" > $HOME/speed_upl
+                printf "%.2f Mbps\n" "$upload_speed" > "$out_upl"
             fi
             
-            # No link available with this method
-            echo "N/A" > $HOME/speed_lnk
+            echo "curl (Tele2/httpbin)" > "$out_lnk"
+            return 0
         }
 echo ""
 color_echo "   TESTING SERVER SPEED !" "green"
@@ -246,8 +264,18 @@ limit2() {
    sleep 3
    menu
 }
-# Toggle limiter service on/off
+# Toggle limiter service on/off (requires limiter binary from installer)
 limit_ssh() {
+    if ! command -v limiter > /dev/null 2>&1 && [[ ! -x /bin/limiter ]]; then
+        clear
+        echo ""
+        warning_msg "Limiter is not installed."
+        color_echo "Install the limiter module or run the installer to use this option." "yellow"
+        echo ""
+        color_echo_n "Press ENTER to return..." "yellow"
+        read -r
+        return 0
+    fi
     if [[ $(ps x | grep "limiter" | grep -v grep | wc -l) = '0' ]]; then
         limit1
     else
@@ -380,6 +408,54 @@ botssh() {
     color_echo_n "Press ENTER to return..." "yellow"
     read
     menu2
+}
+
+# VPS / system details (replaces external detalhes module)
+detalhes() {
+    print_header "              VPS INFO                 "
+    echo ""
+    local h g r w y c bl reset
+    g=$(get_color_code "green")
+    r=$(get_color_code "red")
+    w=$(get_color_code "white")
+    y=$(get_color_code "yellow")
+    c=$(get_color_code "cyan")
+    bl=$(get_color_code "blue")
+    reset=$(get_reset_code)
+    local _hn _ip4 _ip6 _os _up _ram _cpu _disk_used _disk_total _disk_pct
+    _hn=$(hostname 2>/dev/null || echo "N/A")
+    if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+        _ip4=$(cat /etc/IP)
+    else
+        _ip4=$(hostname -I 2>/dev/null | awk '{print $1}')
+        [[ -z "$_ip4" ]] && _ip4="N/A"
+    fi
+    _ip6=$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i~/:/) print $i}' | head -1)
+    [[ -z "$_ip6" ]] && _ip6="N/A"
+    if [[ -f /etc/os-release ]]; then
+        _os=$(grep -E ^PRETTY_NAME= /etc/os-release 2>/dev/null | cut -d'"' -f2)
+    else
+        _os=$(cut -d' ' -f1,2 /etc/issue.net 2>/dev/null | head -1)
+    fi
+    [[ -z "$_os" ]] && _os="N/A"
+    _up=$(uptime -p 2>/dev/null || echo "N/A")
+    _ram=$(free -h 2>/dev/null | awk '/^Mem:/{print $2 " total / " $3 " used"}')
+    [[ -z "$_ram" ]] && _ram="N/A"
+    _cpu=$(nproc 2>/dev/null || grep -c processor /proc/cpuinfo 2>/dev/null)
+    [[ -z "$_cpu" ]] && _cpu="N/A"
+    _disk_used=$(df -h / 2>/dev/null | awk 'NR==2{print $3}')
+    _disk_total=$(df -h / 2>/dev/null | awk 'NR==2{print $2}')
+    _disk_pct=$(df -h / 2>/dev/null | awk 'NR==2{print $5}')
+    echo -e "${bl}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset}"
+    echo -e "  ${g}Hostname:${w}  $_hn${reset}"
+    echo -e "  ${g}IPv4:${w}      $_ip4${reset}"
+    echo -e "  ${g}IPv6:${w}      $_ip6${reset}"
+    echo -e "  ${g}OS:${w}        $_os${reset}"
+    echo -e "  ${g}Uptime:${w}    $_up${reset}"
+    echo -e "  ${g}RAM:${w}       $_ram${reset}"
+    echo -e "  ${g}CPU cores:${w} $_cpu${reset}"
+    echo -e "  ${g}Disk (/):${w}  $_disk_used / $_disk_total (${_disk_pct})${reset}"
+    echo -e "${bl}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset}"
 }
 
 # Change root password
@@ -574,36 +650,14 @@ yellow_code=$(get_color_code "yellow")
 cyan_code=$(get_color_code "cyan")
 blue_code=$(get_color_code "blue")
 reset_code=$(get_reset_code)
-echo -e "${green_code}SYSTEM            RAM MEMORY      PROCESSOR ${reset_code}"
-color_echo_n "OS: " "red"
-color_echo_n "$_system " "white"
-color_echo_n "Total:" "red"
-color_echo_n "$_ram " "white"
-color_echo_n "CPU: " "red"
-color_echo "$_core" "white"
-color_echo_n "Hour: " "red"
-color_echo_n "$_hora     " "white"
-color_echo_n "In use: " "red"
-color_echo_n "$_usor " "white"
-color_echo_n "In use: " "red"
-color_echo "$_usop" "white"
+echo -e "${green_code}SYSTEM                 RAM MEMORY            PROCESSOR${reset_code}"
+printf "  ${red_code}Hostname:${white_code} %-14s  ${red_code}Total:${white_code} %-10s  ${red_code}CPU:${white_code} %s${reset_code}\n" "$(printf '%-14s' "$_hostname_display")" "$(printf '%-10s' "$_ram")" "$_core"
+printf "  ${red_code}Hour:${white_code} %-18s  ${red_code}In use:${white_code} %-10s  ${red_code}In use:${white_code} %s${reset_code}\n" "$(printf '%-18s' "$_hora")" "$(printf '%-10s' "$_usor")" "$_usop"
 echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-    echo -e "${green_code}NETWORK           DISK USAGE      TRAFFIC ${reset_code}"
-    color_echo_n "IPv4: " "red"
-    color_echo_n "$_ipv4 " "white"
-    color_echo_n "Used:" "red"
-    color_echo_n "$_disk_used/$_disk_total " "white"
-    color_echo_n "Download: " "red"
-    color_echo "$_net_download" "white"
-    color_echo_n "IPv6: " "red"
-    color_echo_n "$_ipv6 " "white"
-    color_echo_n "Disk: " "red"
-    color_echo "$_disk_percent" "white"
-    color_echo_n "Upload: " "red"
-    color_echo "$_net_upload" "white"
-    color_echo_n "Hostname: " "red"
-    color_echo "$_hostname_display" "white"
-    echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
+echo -e "${green_code}NETWORK                DISK USAGE             TRAFFIC (↓DL ↑UL)${reset_code}"
+printf "  ${red_code}IPv4:${white_code} %-18s  ${red_code}Disk used:${white_code} %-10s  ${red_code}${white_code}%s${reset_code}\n" "$(printf '%-18s' "$_ipv4")" "$(printf '%-10s' "$_disk_used/$_disk_total")" "$_net_stats"
+printf "  ${red_code}IPv6:${white_code} %-18s  ${red_code}Disk:${white_code} %s${reset_code}\n" "$(printf '%-18s' "$_ipv6")" "$_disk_percent"
+echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 [[ ! -e /tmp/att ]]  && {
     color_echo_n "Online:" "green"
     color_echo_n " $_onlin     " "white"
@@ -635,8 +689,7 @@ reset_code=$(get_reset_code)
     echo -e "${red_code}[${cyan_code}21${red_code}] ${white_code}• ${yellow_code}REMOVE HOST ${red_code}          [${cyan_code}27${red_code}] ${white_code}• ${yellow_code}MAIN EXECUTION ${autm}${reset_code}"
     echo -e "${red_code}[${cyan_code}22${red_code}] ${white_code}• ${yellow_code}RESET SYSTEM ${red_code}         [${cyan_code}28${red_code}] ${var01} ${yellow_code}UPDATE SCRIPT ${reset_code}"
     echo -e "${red_code}[${cyan_code}23${red_code}] ${white_code}• ${yellow_code}RESET SERVICES ${red_code}       [${cyan_code}29${red_code}] ${white_code}• ${yellow_code}REMOVE SCRIPT ${reset_code}"
-    echo -e "${red_code}[${cyan_code}24${red_code}] ${white_code}• ${yellow_code}BLOCK TORRENT ${stsf}${red_code}      [${cyan_code}0${red_code}] ${white_code}• ${yellow_code}BACK ${green_code}<${yellow_code}<${red_code}< ${reset_code}"
-    echo -e "${red_code}[${cyan_code}25${red_code}] ${white_code}• ${yellow_code}BOT TELEGRAM ${stsbot}${red_code}       [${cyan_code}00${red_code}] ${white_code}• ${yellow_code}EXIT ${green_code}<${yellow_code}<${red_code}< ${reset_code}"
+    echo -e "${red_code}[${cyan_code}0${red_code}] ${white_code}• ${yellow_code}BACK ${green_code}<${yellow_code}<${red_code}< ${red_code}    [${cyan_code}00${red_code}] ${white_code}• ${yellow_code}EXIT ${green_code}<${yellow_code}<${red_code}< ${reset_code}"
 echo ""
 echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 echo ""
@@ -675,12 +728,6 @@ read -r x
             reiniciarservicos
             sleep 3
             menu2
-            ;;
-        24)
-            blockt
-            ;;
-        25)
-            botssh
             ;;
         26)
             clear
@@ -853,29 +900,13 @@ while true; do
     echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
     print_header_red "               ⇱ SSHPLUS MANAGER ⇲                "
     echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-    echo -e "${green_code}SYSTEM            RAM MEMORY      PROCESSOR ${reset_code}"
-    color_echo_n "OS: " "red"
-    color_echo_n "$_system " "white"
-    color_echo_n "Total:" "red"
-    color_echo_n "$_ram " "white"
-    color_echo_n "CPU: " "red"
-    color_echo "$_core" "white"
-    color_echo_n "Hour: " "red"
-    color_echo_n "$_hora     " "white"
-    color_echo_n "In use: " "red"
-    color_echo_n "$_usor " "white"
-    color_echo_n "In use: " "red"
-    color_echo "$_usop" "white"
+    echo -e "${green_code}SYSTEM                 RAM MEMORY            PROCESSOR${reset_code}"
+    printf "  ${red_code}Hostname:${white_code} %-14s  ${red_code}Total:${white_code} %-10s  ${red_code}CPU:${white_code} %s${reset_code}\n" "$(printf '%-14s' "$_hostname_display")" "$(printf '%-10s' "$_ram")" "$_core"
+    printf "  ${red_code}Hour:${white_code} %-18s  ${red_code}In use:${white_code} %-10s  ${red_code}In use:${white_code} %s${reset_code}\n" "$(printf '%-18s' "$_hora")" "$(printf '%-10s' "$_usor")" "$_usop"
     echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-    echo -e "${green_code}NETWORK           DISK USAGE      TRAFFIC ${reset_code}"
-    color_echo_n "IP: " "red"
-    color_echo_n "$_ip " "white"
-    color_echo_n "Used:" "red"
-    color_echo_n "$_disk_used/$_disk_total " "white"
-    color_echo_n "Network: " "red"
-    color_echo "$_net_stats" "white"
-    color_echo_n "Disk: " "red"
-    color_echo "$_disk_percent" "white"
+    echo -e "${green_code}NETWORK                DISK USAGE             TRAFFIC (↓DL ↑UL)${reset_code}"
+    printf "  ${red_code}IPv4:${white_code} %-18s  ${red_code}Disk used:${white_code} %-10s  ${red_code}${white_code}%s${reset_code}\n" "$(printf '%-18s' "$_ipv4")" "$(printf '%-10s' "$_disk_used/$_disk_total")" "$_net_stats"
+    printf "  ${red_code}IPv6:${white_code} %-18s  ${red_code}Disk:${white_code} %s${reset_code}\n" "$(printf '%-18s' "$_ipv6")" "$_disk_percent"
     echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
     [[ ! -e /tmp/att ]]  && {
         color_echo_n "Online:" "green"
@@ -944,11 +975,6 @@ while true; do
         4 | 04)
             clear
             sshmonitor
-            echo ""
-            color_echo_n "ENTER " "red"
-            color_echo_n "to return to " "yellow"
-            color_echo_n "MENU!" "green"
-            read
             ;;      
         5 | 05)
             clear
@@ -1066,8 +1092,16 @@ while true; do
             ;;
         17)
             clear
-            badvpn
-            exit 0
+            if command -v badvpn > /dev/null 2>&1 || [[ -x /bin/badvpn ]]; then
+                badvpn
+            else
+                echo ""
+                warning_msg "BAD VPN module is not installed."
+                color_echo "Install via the installer or add the badvpn module to use this option." "yellow"
+                echo ""
+                color_echo_n "Press ENTER to return..." "yellow"
+                read -r
+            fi
             ;;
         18)
             clear
