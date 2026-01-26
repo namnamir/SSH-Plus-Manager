@@ -34,7 +34,15 @@ check_systemd() {
 
 # Function to get current SSH ports from sshd_config
 get_current_ports() {
-    grep '^Port' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | sort -n | uniq
+    # Get all Port lines (including those with leading spaces)
+    grep -E '^[[:space:]]*Port[[:space:]]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | sort -n | uniq
+}
+
+# Function to check if a specific port exists in sshd_config
+port_exists() {
+    local port=$1
+    # Check if port exists (handles spaces and exact match)
+    grep -qE "^[[:space:]]*Port[[:space:]]+${port}[[:space:]]*$" /etc/ssh/sshd_config 2>/dev/null
 }
 
 # Function to show current ports
@@ -53,10 +61,13 @@ show_current_ports() {
 # Function to add port to sshd_config
 add_port_sshd() {
     local port=$1
+    local quiet="${2:-false}"  # Optional second parameter for quiet mode
     
-    # Check if port already exists
-    if grep -q "^Port $port" /etc/ssh/sshd_config 2>/dev/null; then
-        warning_msg "Port $port is already in sshd_config"
+    # Check if port already exists using the helper function
+    if port_exists "$port"; then
+        if [[ "$quiet" != "true" ]]; then
+            warning_msg "Port $port is already in sshd_config"
+        fi
         return 0
     fi
     
@@ -69,10 +80,13 @@ add_port_sshd() {
         echo "Port $port" >> /etc/ssh/sshd_config
     fi
     
-    # Validate configuration
+    # Validate configuration immediately after adding
     if ! sshd -t > /dev/null 2>&1; then
-        error_msg "Invalid SSH configuration! Reverting changes..."
+        # Revert the change
         sed -i "/^Port $port$/d" /etc/ssh/sshd_config
+        if [[ "$quiet" != "true" ]]; then
+            error_msg "Invalid SSH configuration! Port $port not added."
+        fi
         return 1
     fi
     
@@ -331,21 +345,41 @@ main_menu() {
                 # Default ports
                 local default_ports="22 3398 443 80 8080 8443 53 993 995"
                 
-                # Clear existing ports (except 22)
+                # Get current ports before making changes
                 local current_ports=$(get_current_ports)
-                while read port; do
-                    if [[ "$port" != "22" ]]; then
-                        remove_port_sshd "$port" 2>/dev/null
-                    fi
-                done <<< "$current_ports"
                 
-                # Add all default ports
+                # Add all default ports (skip if already exists)
+                local added_count=0
+                local skipped_count=0
+                local failed_count=0
+                
                 for port in $default_ports; do
-                    add_port_sshd "$port" 2>/dev/null
+                    # Check if port already exists in current configuration
+                    if port_exists "$port"; then
+                        ((skipped_count++))
+                        continue
+                    fi
+                    
+                    # Try to add the port (quiet mode for batch operations)
+                    if add_port_sshd "$port" "true"; then
+                        ((added_count++))
+                        # Update current_ports list to include newly added port
+                        current_ports=$(get_current_ports)
+                    else
+                        ((failed_count++))
+                    fi
                 done
                 
-                # Validate configuration
-                if sshd -t > /dev/null 2>&1; then
+                # Final validation
+                if ! sshd -t > /dev/null 2>&1; then
+                    error_msg "Configuration validation failed!"
+                    error_msg "Please check /etc/ssh/sshd_config manually"
+                    sleep 3
+                    continue
+                fi
+                
+                # Apply changes if any ports were added
+                if [[ $added_count -gt 0 ]]; then
                     if check_systemd; then
                         configure_systemd_socket
                     else
@@ -358,9 +392,21 @@ main_menu() {
                     
                     configure_ufw
                     success_msg "Multi-port setup completed!"
+                    if [[ $added_count -gt 0 ]]; then
+                        info_msg "Added $added_count new port(s)."
+                    fi
+                    if [[ $skipped_count -gt 0 ]]; then
+                        info_msg "Skipped $skipped_count port(s) that were already configured."
+                    fi
+                    if [[ $failed_count -gt 0 ]]; then
+                        warning_msg "$failed_count port(s) could not be added."
+                    fi
+                    verify_setup
+                elif [[ $skipped_count -gt 0 ]]; then
+                    info_msg "All ports are already configured."
                     verify_setup
                 else
-                    error_msg "Configuration validation failed!"
+                    warning_msg "No ports were configured."
                 fi
                 
                 sleep 5
