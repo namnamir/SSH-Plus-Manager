@@ -43,17 +43,18 @@ _mdls=("addhost" "delhost" "alterarsenha" "criarusuario" "expcleaner" "mudardata
 for _arq in ${_mdls[@]}; do
 	[[ -e $_dir1/$_arq ]] && rm $_dir1/$_arq >/dev/null 2>&1
 	# Try wget first, then curl as fallback
-	if ! wget -c -P $_dir1 $_REPO_URL/Modules/$_arq >/dev/null 2>&1; then
-		if ! curl -sL $_REPO_URL/Modules/$_arq -o $_dir1/$_arq >/dev/null 2>&1; then
-			echo "Failed to download $_arq" >&2
+	_download_url="$_REPO_URL/Modules/$_arq"
+	if ! wget -c -P $_dir1 "$_download_url" >/dev/null 2>&1; then
+		if ! curl -sL "$_download_url" -o "$_dir1/$_arq" >/dev/null 2>&1; then
+			echo "ERROR: Failed to download $_arq from $_download_url" >&2
 			continue
 		fi
 	fi
 	# Verify file was downloaded and is not empty
-	if [[ -f $_dir1/$_arq ]] && [[ -s $_dir1/$_arq ]]; then
-		chmod +x $_dir1/$_arq
+	if [[ -f "$_dir1/$_arq" ]] && [[ -s "$_dir1/$_arq" ]]; then
+		chmod +x "$_dir1/$_arq"
 	else
-		echo "Warning: $_arq download failed or file is empty" >&2
+		echo "ERROR: $_arq download failed or file is empty at $_dir1/$_arq" >&2
 	fi
 done
 # Move utility files to SSHPlus directory (colors, cabecalho, bot, open.py, proxy.py)
@@ -107,12 +108,20 @@ if ! wget -q https://github.com/jqlang/jq/releases/latest/download/jq-linux-amd6
 fi
 [[ -f jq-linux64 ]] && chmod +x jq-linux64 && mv jq-linux64 $(which jq) 2>/dev/null
 
-# Verify critical files are installed
+# Verify critical files are installed (especially menu)
 if [[ ! -f /bin/menu ]] || [[ ! -x /bin/menu ]]; then
 	echo "ERROR: Menu command not installed properly!" >&2
-	echo "Attempting to re-download menu..." >&2
-	wget -q $_REPO_URL/Modules/menu -O /bin/menu 2>&1 || curl -sL $_REPO_URL/Modules/menu -o /bin/menu 2>&1
-	chmod +x /bin/menu 2>/dev/null
+	echo "Attempting to re-download menu from $_REPO_URL/Modules/menu..." >&2
+	if wget -q "$_REPO_URL/Modules/menu" -O /bin/menu 2>&1 || curl -sL "$_REPO_URL/Modules/menu" -o /bin/menu 2>&1; then
+		if [[ -f /bin/menu ]] && [[ -s /bin/menu ]]; then
+			chmod +x /bin/menu
+			echo "Menu re-downloaded successfully!" >&2
+		else
+			echo "ERROR: Menu file is empty or invalid!" >&2
+		fi
+	else
+		echo "ERROR: Failed to download menu file!" >&2
+	fi
 fi
 
 service cron restart >/dev/null 2>&1
