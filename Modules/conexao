@@ -1663,107 +1663,19 @@ exit 0' >$RCLOCAL
 	}
 
 	fun_openssh() {
-		clear
-		print_header "            OPENSSH             "
-		echo ""
-		echo ""
-		menu_option "1" "ADD PORT (SIMPLE)" "red" "yellow"
-		menu_option "2" "REMOVE PORT" "red" "yellow"
-		menu_option "3" "MULTI-PORT SETUP (ADVANCED)" "red" "yellow"
-		menu_option "4" "BACK" "red" "yellow"
-		echo ""
-		color_echo_n "PLEASE SELECT FROM OPTIONS " "green"
-		color_echo_n "?" "yellow"
-		color_echo_n " " "white"
-		read resp
-		if [[ "$resp" = '1' ]]; then
-			clear
-			print_header "         ADD PORT TO SSH         "
-			echo ""
-			color_echo_n "WHICH PORT YOU WANT TO ADD " "green"
-			color_echo_n "?" "yellow"
-			color_echo_n " " "white"
-			read pt
-			[[ -z "$pt" ]] && {
-				echo ""
-				error_msg "Invalid port!"
-				sleep 3
-				fun_conexao
-			}
-			verif_ptrs $pt
-			echo ""
-			color_echo "ADDING PORT TO SSH" "green"
-			echo ""
-			fun_addpssh() {
-				echo "Port $pt" >>/etc/ssh/sshd_config
-				service ssh restart
-			}
-			fun_bar 'fun_addpssh'
-			echo ""
-			success_msg "SUCCESSFULLY ADDED PORT"
-			sleep 3
-			fun_conexao
-		elif [[ "$resp" = '2' ]]; then
-			clear
-			print_header_red "         REMOVE PORT FROM SSH         "
-			echo ""
-			warning_msg "[!] STANDARD PORT 22 CAUTION !"
-			echo ""
-			color_echo_n "PORTS IN USE: " "yellow"
-			color_echo "$(grep 'Port' /etc/ssh/sshd_config | cut -d' ' -f2 | grep -v 'no' | xargs)" "white"
-			echo ""
-			color_echo_n "WHICH PORT DO YOU WANT TO REMOVE " "green"
-			color_echo_n "?" "yellow"
-			color_echo_n " " "white"
-			read pt
-			[[ -z "$pt" ]] && {
-				echo ""
-				error_msg "Invalid port!"
-				sleep 2
-				fun_conexao
-			}
-			[[ $(grep -wc "$pt" '/etc/ssh/sshd_config') != '0' ]] && {
-				echo -e "\n\033[1;32mREMOVING PORT FROM SSH\033[0m"
-				echo ""
-				fun_delpssh() {
-					sed -i "/Port $pt/d" /etc/ssh/sshd_config
-					service ssh restart
-				}
-				fun_bar 'fun_delpssh'
-				echo ""
-				success_msg "PORT SUCCESSFULLY REMOVED"
-				sleep 2
-				fun_conexao
-			} || {
-				echo ""
-				error_msg "Invalid port!"
-				sleep 2
-				fun_conexao
-			}
-		elif [[ "$resp" = '3' ]]; then
-			# Call advanced multi-port setup module
-			if [[ -f "/bin/multiport" ]]; then
-				/bin/multiport
-			elif [[ -f "/etc/SSHPlus/multiport" ]]; then
-				/etc/SSHPlus/multiport
-			elif [[ -f "$(dirname "$0")/multiport" ]]; then
-				"$(dirname "$0")/multiport"
-			else
-				error_msg "Multi-port module not found!"
-				sleep 2
-			fi
-			fun_conexao
-		elif [[ "$resp" = '4' ]]; then
-			echo ""
-			color_echo "Returning..." "red"
-			sleep 2
-			fun_conexao
+		# Directly call the multi-port setup module
+		if [[ -f "/bin/multiport" ]]; then
+			/bin/multiport
+		elif [[ -f "/etc/SSHPlus/multiport" ]]; then
+			/etc/SSHPlus/multiport
+		elif [[ -f "$(dirname "$0")/multiport" ]]; then
+			"$(dirname "$0")/multiport"
 		else
-			echo ""
-			error_msg "Invalid option!"
+			clear
+			error_msg "Multi-port module not found!"
 			sleep 2
-			fun_conexao
 		fi
+		fun_conexao
 	}
 
 	fun_sslh() {

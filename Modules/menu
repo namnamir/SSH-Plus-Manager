@@ -81,17 +81,139 @@ echo -e "${yellow_code}]${white_code} -${green_code} OK !${white_code}${reset_co
 tput cnorm
 }
 fun_tst () {
-speedtest --share > speed
+# Check if speedtest is installed
+if ! command -v speedtest > /dev/null 2>&1 && ! command -v speedtest-cli > /dev/null 2>&1; then
+    # Try to install speedtest-cli
+    if command -v apt-get > /dev/null 2>&1; then
+        apt-get update -qq > /dev/null 2>&1
+        apt-get install -y speedtest-cli > /dev/null 2>&1
+    elif command -v yum > /dev/null 2>&1; then
+        yum install -y speedtest-cli > /dev/null 2>&1
+    elif command -v pip3 > /dev/null 2>&1; then
+        pip3 install speedtest-cli > /dev/null 2>&1
+    elif command -v pip > /dev/null 2>&1; then
+        pip install speedtest-cli > /dev/null 2>&1
+    fi
+fi
+
+# Determine which speedtest command to use
+if command -v speedtest > /dev/null 2>&1; then
+    SPEEDTEST_CMD="speedtest"
+elif command -v speedtest-cli > /dev/null 2>&1; then
+    SPEEDTEST_CMD="speedtest-cli"
+else
+    echo "ERROR: speedtest not found" > $HOME/speed
+    echo "N/A" > $HOME/speed_png
+    echo "N/A" > $HOME/speed_down
+    echo "N/A" > $HOME/speed_upl
+    echo "N/A" > $HOME/speed_lnk
+    return 1
+fi
+
+# Try JSON output first (more reliable for Ookla speedtest)
+if $SPEEDTEST_CMD --version 2>&1 | grep -q "Speedtest by Ookla"; then
+    # Ookla speedtest (newer version) - use JSON
+    $SPEEDTEST_CMD --format json --progress no > $HOME/speed 2>&1
+    if [[ $? -eq 0 ]] && [[ -s $HOME/speed ]] && command -v python3 > /dev/null 2>&1; then
+        # Parse JSON output
+        python3 << PYEOF < $HOME/speed
+import json
+import sys
+import os
+home = os.environ.get('HOME', '/root')
+try:
+    data = json.load(sys.stdin)
+    ping = data.get('ping', {}).get('latency', 0)
+    download = data.get('download', {}).get('bandwidth', 0) / 125000
+    upload = data.get('upload', {}).get('bandwidth', 0) / 125000
+    url = data.get('result', {}).get('url', 'N/A')
+    
+    with open(os.path.join(home, 'speed_png'), 'w') as f:
+        f.write('{:.2f} ms'.format(ping) if ping else 'N/A')
+    with open(os.path.join(home, 'speed_down'), 'w') as f:
+        f.write('{:.2f} Mbps'.format(download) if download else 'N/A')
+    with open(os.path.join(home, 'speed_upl'), 'w') as f:
+        f.write('{:.2f} Mbps'.format(upload) if upload else 'N/A')
+    with open(os.path.join(home, 'speed_lnk'), 'w') as f:
+        f.write(str(url) if url else 'N/A')
+except Exception as e:
+    pass
+PYEOF
+    fi
+fi
+
+# If JSON parsing failed or using old format, parse text output
+if [[ ! -f $HOME/speed_png ]] || [[ ! -s $HOME/speed_png ]]; then
+    # Try with --share flag (older speedtest-cli)
+    $SPEEDTEST_CMD --share > $HOME/speed 2>&1
+    
+    # Parse text output - look for patterns instead of fixed line numbers
+    png=$(grep -i "ping\|latency" $HOME/speed 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+[[:space:]]*ms|[0-9]+[[:space:]]*ms' | head -1 | tr -d ' ')
+    down=$(grep -i "download\|downloading" $HOME/speed 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+[[:space:]]*[KMGT]?bits/s|[0-9]+\.[0-9]+[[:space:]]*Mbps' | head -1 | tr -d ' ')
+    upl=$(grep -i "upload\|uploading" $HOME/speed 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+[[:space:]]*[KMGT]?bits/s|[0-9]+\.[0-9]+[[:space:]]*Mbps' | head -1 | tr -d ' ')
+    lnk=$(grep -i "http\|https\|share\|result" $HOME/speed 2>/dev/null | grep -oE 'https?://[^[:space:]]+' | head -1)
+    
+    # Alternative parsing for speedtest-cli format (line-based)
+    if [[ -z "$png" ]]; then
+        png=$(grep -i "ping" $HOME/speed 2>/dev/null | awk -F: '{print $2}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)
+    fi
+    if [[ -z "$down" ]]; then
+        down=$(grep -i "download" $HOME/speed 2>/dev/null | awk -F: '{print $2}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)
+    fi
+    if [[ -z "$upl" ]]; then
+        upl=$(grep -i "upload" $HOME/speed 2>/dev/null | awk -F: '{print $2}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | head -1)
+    fi
+    if [[ -z "$lnk" ]]; then
+        lnk=$(grep -oE 'https?://[^[:space:]]+' $HOME/speed 2>/dev/null | head -1)
+    fi
+    
+    # Clean up values
+    png=$(echo "$png" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    down=$(echo "$down" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    upl=$(echo "$upl" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    lnk=$(echo "$lnk" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    # Set defaults if empty
+    [[ -z "$png" ]] && png="N/A"
+    [[ -z "$down" ]] && down="N/A"
+    [[ -z "$upl" ]] && upl="N/A"
+    [[ -z "$lnk" ]] && lnk="N/A"
+    
+    # Write to files
+    echo "$png" > $HOME/speed_png
+    echo "$down" > $HOME/speed_down
+    echo "$upl" > $HOME/speed_upl
+    echo "$lnk" > $HOME/speed_lnk
+fi
 }
 echo ""
 color_echo "   TESTING SERVER SPEED !" "green"
 echo ""
 wait 'fun_tst'
 echo ""
-png=$(cat speed | sed -n '5 p' |awk -F : {'print $NF'})
-down=$(cat speed | sed -n '7 p' |awk -F :  {'print $NF'})
-upl=$(cat speed | sed -n '9 p' |awk -F :  {'print $NF'})
-lnk=$(cat speed | sed -n '10 p' |awk {'print $NF'})
+
+# Read parsed values from files
+if [[ -f $HOME/speed_png ]] && [[ -s $HOME/speed_png ]]; then
+    png=$(cat $HOME/speed_png)
+else
+    png="N/A"
+fi
+if [[ -f $HOME/speed_down ]] && [[ -s $HOME/speed_down ]]; then
+    down=$(cat $HOME/speed_down)
+else
+    down="N/A"
+fi
+if [[ -f $HOME/speed_upl ]] && [[ -s $HOME/speed_upl ]]; then
+    upl=$(cat $HOME/speed_upl)
+else
+    upl="N/A"
+fi
+if [[ -f $HOME/speed_lnk ]] && [[ -s $HOME/speed_lnk ]]; then
+    lnk=$(cat $HOME/speed_lnk)
+else
+    lnk="N/A"
+fi
+
 # Use color codes for speedtest display
 blue_code=$(get_color_code "blue")
 green_code=$(get_color_code "green")
@@ -108,7 +230,7 @@ color_echo "$upl" "white"
 color_echo_n "LINK: " "green"
 color_echo "$lnk" "cyan"
 echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-rm -rf $HOME/speed
+rm -rf $HOME/speed $HOME/speed_png $HOME/speed_down $HOME/speed_upl $HOME/speed_lnk
 }
 #limiter
 function limit1 () {
@@ -214,6 +336,40 @@ _hora=$(printf '%(%H:%M:%S)T')
 _onlin=$(printf '%-5s' "$_onli")
 _userexp=$(printf '%-5s' "$_expuser")
 _tuser=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
+
+# Get IP addresses
+if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+    _ip=$(cat /etc/IP)
+else
+    _ip=$(hostname -I | awk '{print $1}' 2>/dev/null)
+    [[ -z "$_ip" ]] && _ip=$(wget -qO- ipv4.icanhazip.com 2>/dev/null)
+    [[ -z "$_ip" ]] && _ip=$(curl -s ipv4.icanhazip.com 2>/dev/null)
+    [[ -z "$_ip" ]] && _ip="N/A"
+fi
+
+# Get network interface stats (upload/download)
+if command -v ifstat > /dev/null 2>&1; then
+    _net_stats=$(ifstat -i $(ip route | grep default | awk '{print $5}' | head -1) 1 1 2>/dev/null | tail -1 | awk '{print "↓" $2 " ↑" $3}')
+elif [[ -f /proc/net/dev ]]; then
+    _interface=$(ip route | grep default | awk '{print $5}' | head -1)
+    if [[ -n "$_interface" ]]; then
+        _rx_bytes=$(cat /proc/net/dev | grep "$_interface" | awk '{print $2}')
+        _tx_bytes=$(cat /proc/net/dev | grep "$_interface" | awk '{print $10}')
+        _rx_mb=$(awk "BEGIN {printf \"%.2f\", $_rx_bytes/1024/1024}")
+        _tx_mb=$(awk "BEGIN {printf \"%.2f\", $_tx_bytes/1024/1024}")
+        _net_stats="↓${_rx_mb}MB ↑${_tx_mb}MB"
+    else
+        _net_stats="N/A"
+    fi
+else
+    _net_stats="N/A"
+fi
+
+# Get disk usage
+_disk_used=$(df -h / | awk 'NR==2 {print $3}')
+_disk_total=$(df -h / | awk 'NR==2 {print $2}')
+_disk_percent=$(df -h / | awk 'NR==2 {print $5}')
+
 clear
 # Use color codes for menu borders and header
 blue_code=$(get_color_code "blue")
@@ -226,6 +382,7 @@ green_code=$(get_color_code "green")
 red_code=$(get_color_code "red")
 white_code=$(get_color_code "white")
 yellow_code=$(get_color_code "yellow")
+cyan_code=$(get_color_code "cyan")
 blue_code=$(get_color_code "blue")
 reset_code=$(get_reset_code)
 echo -e "${green_code}SYSTEM            RAM MEMORY      PROCESSOR ${reset_code}"
@@ -241,6 +398,16 @@ color_echo_n "In use: " "red"
 color_echo_n "$_usor " "white"
 color_echo_n "In use: " "red"
 color_echo "$_usop" "white"
+echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
+echo -e "${green_code}NETWORK           DISK USAGE      TRAFFIC ${reset_code}"
+color_echo_n "IP: " "red"
+color_echo_n "$_ip " "white"
+color_echo_n "Used:" "red"
+color_echo_n "$_disk_used/$_disk_total " "white"
+color_echo_n "Network: " "red"
+color_echo "$_net_stats" "white"
+color_echo_n "Disk: " "red"
+color_echo "$_disk_percent" "white"
 echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 [[ ! -e /tmp/att ]]  && {
     color_echo_n "Online:" "green"
@@ -516,7 +683,47 @@ case "$x" in
    ;;
    12)
    clear
-   banner
+   # Banner function - display IP and system info
+   if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+       IP=$(cat /etc/IP)
+   else
+       # Try to get IP from various sources
+       IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
+       [[ -z "$IP" ]] && IP=$(wget -qO- ipv4.icanhazip.com 2>/dev/null)
+       [[ -z "$IP" ]] && IP=$(curl -s ipv4.icanhazip.com 2>/dev/null)
+       [[ -z "$IP" ]] && IP="N/A"
+   fi
+   
+   print_header "            BANNER SETUP             "
+   echo ""
+   color_echo "Current IP Address: $IP" "green"
+   echo ""
+   color_echo_n "Enter banner text (or press ENTER to use default): " "yellow"
+   read -r banner_text
+   
+   if [[ -z "$banner_text" ]]; then
+       banner_text="SSHPLUS MANAGER - IP: $IP"
+   fi
+   
+   # Create banner file
+   echo "$banner_text" > /etc/banner
+   echo "$banner_text" > /etc/issue.net
+   
+   # Update sshd_config to show banner
+   if ! grep -q "^Banner" /etc/ssh/sshd_config 2>/dev/null; then
+       echo "Banner /etc/banner" >> /etc/ssh/sshd_config
+   fi
+   
+   # Restart SSH to apply banner
+   if command -v systemctl > /dev/null 2>&1; then
+       systemctl restart ssh.service 2>/dev/null || systemctl restart sshd.service 2>/dev/null
+   else
+       service ssh restart 2>/dev/null || service sshd restart 2>/dev/null
+   fi
+   
+   success_msg "Banner updated successfully!"
+   echo ""
+   color_echo "Banner will be displayed when users connect via SSH" "cyan"
    sleep 3
    ;;
    13)

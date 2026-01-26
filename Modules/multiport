@@ -51,9 +51,11 @@ check_dependencies() {
         warning_msg "systemd not found. Some features may not work."
     fi
     
-    # Check for ufw - optional
+    # Check for ufw - REQUIRED for firewall configuration
     if ! command -v ufw > /dev/null 2>&1; then
-        info_msg "UFW not installed (optional - firewall configuration will be skipped)"
+        missing_deps+=("ufw")
+        install_needed=true
+        needs_root=true
     fi
     
     # Check for essential text processing tools
@@ -81,53 +83,6 @@ check_dependencies() {
         fi
     fi
     
-    # Check for package manager
-    local pkg_manager=""
-    if command -v apt-get > /dev/null 2>&1; then
-        pkg_manager="apt-get"
-    elif command -v yum > /dev/null 2>&1; then
-        pkg_manager="yum"
-    elif command -v dnf > /dev/null 2>&1; then
-        pkg_manager="dnf"
-    elif command -v pacman > /dev/null 2>&1; then
-        pkg_manager="pacman"
-    else
-        warning_msg "No supported package manager found. Please install dependencies manually."
-        return 1
-    fi
-    
-    info_msg "Checking dependencies..."
-    
-    # Check for openssh-server
-    if ! command -v sshd > /dev/null 2>&1; then
-        missing_deps+=("openssh-server")
-        install_needed=true
-    fi
-    
-    # Check for ss (from iproute2)
-    if ! command -v ss > /dev/null 2>&1; then
-        missing_deps+=("iproute2")
-        install_needed=true
-    fi
-    
-    # Check for systemctl (from systemd) - optional but recommended
-    if ! command -v systemctl > /dev/null 2>&1; then
-        warning_msg "systemd not found. Some features may not work."
-    fi
-    
-    # Check for ufw - optional
-    if ! command -v ufw > /dev/null 2>&1; then
-        info_msg "UFW not installed (optional - firewall configuration will be skipped)"
-    fi
-    
-    # Check for essential text processing tools
-    for tool in grep sed awk cut; do
-        if ! command -v "$tool" > /dev/null 2>&1; then
-            missing_deps+=("$tool")
-            install_needed=true
-        fi
-    done
-    
     # Install missing dependencies if needed
     if [[ $install_needed == true ]]; then
         info_msg "Installing missing dependencies: ${missing_deps[*]}"
@@ -140,6 +95,8 @@ check_dependencies() {
                         apt-get install -y openssh-server > /dev/null 2>&1
                     elif [[ "$dep" == "iproute2" ]]; then
                         apt-get install -y iproute2 > /dev/null 2>&1
+                    elif [[ "$dep" == "ufw" ]]; then
+                        apt-get install -y ufw > /dev/null 2>&1
                     elif [[ "$dep" == "grep" ]]; then
                         apt-get install -y grep > /dev/null 2>&1
                     elif [[ "$dep" == "sed" ]]; then
@@ -157,6 +114,8 @@ check_dependencies() {
                         yum install -y openssh-server > /dev/null 2>&1
                     elif [[ "$dep" == "iproute2" ]]; then
                         yum install -y iproute > /dev/null 2>&1
+                    elif [[ "$dep" == "ufw" ]]; then
+                        yum install -y ufw > /dev/null 2>&1
                     elif [[ "$dep" == "grep" ]]; then
                         yum install -y grep > /dev/null 2>&1
                     elif [[ "$dep" == "sed" ]]; then
@@ -174,6 +133,8 @@ check_dependencies() {
                         dnf install -y openssh-server > /dev/null 2>&1
                     elif [[ "$dep" == "iproute2" ]]; then
                         dnf install -y iproute > /dev/null 2>&1
+                    elif [[ "$dep" == "ufw" ]]; then
+                        dnf install -y ufw > /dev/null 2>&1
                     elif [[ "$dep" == "grep" ]]; then
                         dnf install -y grep > /dev/null 2>&1
                     elif [[ "$dep" == "sed" ]]; then
@@ -191,6 +152,8 @@ check_dependencies() {
                         pacman -S --noconfirm openssh > /dev/null 2>&1
                     elif [[ "$dep" == "iproute2" ]]; then
                         pacman -S --noconfirm iproute2 > /dev/null 2>&1
+                    elif [[ "$dep" == "ufw" ]]; then
+                        pacman -S --noconfirm ufw > /dev/null 2>&1
                     elif [[ "$dep" == "grep" ]]; then
                         pacman -S --noconfirm grep > /dev/null 2>&1
                     elif [[ "$dep" == "sed" ]]; then
@@ -211,6 +174,7 @@ check_dependencies() {
             case "$dep" in
                 openssh-server) cmd="sshd" ;;
                 iproute2) cmd="ss" ;;
+                ufw) cmd="ufw" ;;
                 grep) cmd="grep" ;;
                 sed) cmd="sed" ;;
                 awk) cmd="awk" ;;
@@ -463,23 +427,37 @@ EOF
 configure_ufw() {
     local ports=$(get_current_ports)
     
+    # UFW is required - should be installed by check_dependencies, but verify
     if ! command -v ufw > /dev/null 2>&1; then
-        warning_msg "UFW is not installed. Skipping firewall configuration."
-        return 0
+        error_msg "UFW is required but not installed!"
+        error_msg "Please install UFW manually: apt-get install ufw (or yum/dnf/pacman equivalent)"
+        return 1
     fi
     
     # Enable UFW if not already enabled
     if ! ufw status | grep -q "Status: active"; then
         info_msg "Enabling UFW..."
-        ufw --force enable > /dev/null 2>&1
+        if ! ufw --force enable > /dev/null 2>&1; then
+            error_msg "Failed to enable UFW!"
+            return 1
+        fi
     fi
     
     # Allow all configured ports
+    local failed_ports=()
     while read port; do
-        ufw allow "$port/tcp" > /dev/null 2>&1
+        if ! ufw allow "$port/tcp" > /dev/null 2>&1; then
+            failed_ports+=("$port")
+        fi
     done <<< "$ports"
     
+    if [[ ${#failed_ports[@]} -gt 0 ]]; then
+        warning_msg "Failed to configure firewall rules for ports: ${failed_ports[*]}"
+        return 1
+    fi
+    
     success_msg "UFW firewall rules updated"
+    return 0
 }
 
 # Function to verify setup
@@ -565,8 +543,12 @@ main_menu() {
                             service ssh restart 2>/dev/null || service sshd restart 2>/dev/null
                         fi
                     fi
-                    configure_ufw
-                    success_msg "Port $port added successfully!"
+                    if configure_ufw; then
+                        success_msg "Port $port added successfully!"
+                    else
+                        error_msg "Port $port added but firewall configuration failed!"
+                        error_msg "Ports may be blocked by firewall. Please configure UFW manually."
+                    fi
                 else
                     error_msg "Failed to add port $port!"
                 fi
@@ -761,8 +743,12 @@ main_menu() {
                         fi
                     fi
                     
-                    configure_ufw
-                    success_msg "Multi-port setup completed!"
+                    if configure_ufw; then
+                        success_msg "Multi-port setup completed!"
+                    else
+                        error_msg "Multi-port setup completed but firewall configuration failed!"
+                        error_msg "Ports may be blocked. Please configure UFW manually."
+                    fi
                     if [[ $added_count -gt 0 ]]; then
                         info_msg "Added $added_count new port(s)."
                     fi

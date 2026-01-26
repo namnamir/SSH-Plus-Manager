@@ -435,6 +435,17 @@ echo "$username $sshlimiter" >>/root/users.db
 		print_header "       SSH ACCOUNT CREATED !      "
 		# Use color functions for account info display
 		echo ""
+		# Ensure IP is set
+		if [[ -z "$IP" ]] || [[ "$IP" == "" ]]; then
+			if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+				IP=$(cat /etc/IP)
+			else
+				IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
+				[[ -z "$IP" ]] && IP=$(wget -qO- ipv4.icanhazip.com 2>/dev/null)
+				[[ -z "$IP" ]] && IP=$(curl -s ipv4.icanhazip.com 2>/dev/null)
+				[[ -z "$IP" ]] && IP="N/A"
+			fi
+		fi
 		color_echo_n "IP: " "green"
 		color_echo "$IP" "white"
 		color_echo_n "User: " "green"
@@ -488,6 +499,17 @@ echo "$username $sshlimiter" >>/root/users.db
 		print_header "       SSH ACCOUNT CREATED !      "
 		# Use color functions for account info display
 		echo ""
+		# Ensure IP is set
+		if [[ -z "$IP" ]] || [[ "$IP" == "" ]]; then
+			if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+				IP=$(cat /etc/IP)
+			else
+				IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
+				[[ -z "$IP" ]] && IP=$(wget -qO- ipv4.icanhazip.com 2>/dev/null)
+				[[ -z "$IP" ]] && IP=$(curl -s ipv4.icanhazip.com 2>/dev/null)
+				[[ -z "$IP" ]] && IP="N/A"
+			fi
+		fi
 		color_echo_n "IP: " "green"
 		color_echo "$IP" "white"
 		color_echo_n "User: " "green"
