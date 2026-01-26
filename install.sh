@@ -3,6 +3,10 @@
 # SSH Plus Manager Installation Script
 # This script installs and configures the SSH Plus Manager system
 
+# GitHub repository URL
+# This is the base URL for downloading files from the repository
+_REPO_URL="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
+
 # Load color utility functions
 # Try to source from local file first (if running from repo)
 # Otherwise download from repo and source it
@@ -16,7 +20,7 @@ else
     # Download colors file from repo and source it
     # This handles the case when install.sh is run via: bash <(curl ...)
     _tmp_colors="/tmp/sshplus_colors_$$"
-    if wget -q https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/Modules/colors -O "$_tmp_colors" 2>/dev/null; then
+    if wget -q "$_REPO_URL/Modules/colors" -O "$_tmp_colors" 2>/dev/null; then
         source "$_tmp_colors"
         rm -f "$_tmp_colors" 2>/dev/null
     else
@@ -178,10 +182,8 @@ echo ""
 red_code=$(get_color_code "red")
 reset_code=$(get_reset_code)
 echo -e "${red_code}════════════════════════════════════════════════════${reset_code}"
-print_header "WELCOME TO SSHPLUS MANAGER"
+print_header "               WELCOME TO SSHPLUS MANAGER"
 echo -e "${red_code}════════════════════════════════════════════════════${reset_code}"
-echo ""
-color_echo "        THIS SCRIPT IS TRANSLATED BY JENBHIE!" "yellow"
 echo ""
 color_echo_n "• " "red"
 color_echo "THIS SCRIPT IS SET AS TOOLS FOR" "yellow"
@@ -193,7 +195,7 @@ color_echo "  TO A BETTER EXPERIENCE AND VISUALIZATION!" "yellow"
 echo ""
 color_echo_n "≠×≠×≠×[" "red"
 color_echo_n " • " "yellow"
-color_echo_n "V32 ENGLISH VERSION BY JENBHIE" "green"
+color_echo_n "   a new version of SSH PLUS MANAGER   " "green"
 color_echo_n " •" "yellow"
 color_echo "]≠×≠×≠×" "red"
 echo ""
@@ -223,12 +225,37 @@ fi
 echo ""
 color_echo_n "CHECKING... " "cyan"
 color_echo " 16983:16085" "white"
+
+# Ensure the directory exists
+mkdir -p "$_Ink" > /dev/null 2>&1
+
+# Remove old file if it exists
 rm "$_Ink/list" > /dev/null 2>&1
 
 # Download the key file from GitHub repository
-if ! wget -P "$_Ink" https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/Install/list > /dev/null 2>&1; then
+# Try downloading with wget
+if ! wget -P "$_Ink" "$_REPO_URL/Install/list" > /dev/null 2>&1; then
+    # Try with curl as fallback
+    if ! curl -sL "$_REPO_URL/Install/list" -o "$_Ink/list" > /dev/null 2>&1; then
+        echo ""
+        error_msg "ERROR: Failed to download key file!"
+        warning_msg "Please check your internet connection and try again."
+        warning_msg "URL: $_REPO_URL/Install/list"
+        exit 1
+    fi
+fi
+
+# Verify the file was downloaded and is not empty
+if [[ ! -s "$_Ink/list" ]]; then
     echo ""
-    error_msg "ERROR: Failed to download key file!"
+    error_msg "ERROR: Downloaded file is empty or invalid!"
+    exit 1
+fi
+
+# Verify the file was downloaded and is not empty
+if [[ ! -s "$_Ink/list" ]]; then
+    echo ""
+    error_msg "ERROR: Downloaded file is empty or invalid!"
     exit 1
 fi
 
@@ -244,7 +271,7 @@ chmod +x /bin/h > /dev/null 2>&1
 
 # Download the version file to check for updates
 rm version* > /dev/null 2>&1
-if ! wget https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/version > /dev/null 2>&1; then
+if ! wget "$_REPO_URL/version" > /dev/null 2>&1; then
     echo ""
     warning_msg "WARNING: Could not download version file"
 fi
