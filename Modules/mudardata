@@ -52,7 +52,7 @@ while read user; do
 			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}"
 			datanormal="${red_code}$(date -d"$expire" '+%d/%m/%Y')${reset_code}"
 			expired="${red_code}WON${reset_code}"
-			printf '%-62s%-20s%s\n' "$_user" "$datanormal" "$expired"
+			printf '%-62s%-20s%b\n' "$_user" "$datanormal" "$expired"
 			echo "exp" > /tmp/exp
 		else
 			# Use color codes for valid users
@@ -65,7 +65,7 @@ while read user; do
 			_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$user${white_code}"
 			datanormal="${yellow_code}$(date -d"$expire" '+%d/%m/%Y')${reset_code}"
 			ative="${green_code}VALID${reset_code}"
-			printf '%-62s%-20s%s\n' "$_user" "$datanormal" "$ative"
+			printf '%-62s%-20s%b\n' "$_user" "$datanormal" "$ative"
 		fi
 	fi
 	_userPass+="\n${_oP}:${user}"
@@ -77,6 +77,10 @@ then
 	rm /tmp/exp
 fi
 num_user=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
+echo ""
+menu_option "0" "BACK" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
+echo ""
 # Use color functions for prompt
 color_echo_n "Type or select a user " "green"
 color_echo_n "[" "yellow"
@@ -86,6 +90,12 @@ color_echo_n "$num_user" "cyan"
 color_echo_n "]" "yellow"
 color_echo_n ": " "white"
 read -r option
+# Handle menu navigation
+if [[ "$option" == "0" ]]; then
+	exit 0
+elif [[ "$option" == "00" ]]; then
+	exit 0
+fi
 if [[ -z $option ]]
 then
 	echo ""

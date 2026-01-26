@@ -46,10 +46,13 @@ while read _user; do
 	
 	suser="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$_user${reset_code}"
 	ssenha="${yellow_code}Password${white_code}: $_senha${reset_code}"
-    printf '%-60s%s\n' "$suser" "$ssenha"
+    printf '%-60s%b\n' "$suser" "$ssenha"
 	_userPass+="\n${_oP}:${_user}"
 done <<< "${_userT}"
 num_user=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
+echo ""
+menu_option "0" "BACK" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
 echo ""
 # Use color functions directly - they handle fallback internally
 color_echo_n "Type or select a user " "green"
@@ -60,6 +63,12 @@ color_echo_n "$num_user" "cyan"
 color_echo_n "]" "yellow"
 color_echo_n ": " "white"
 read -r option
+# Handle menu navigation
+if [[ "$option" == "0" ]]; then
+	exit 0
+elif [[ "$option" == "00" ]]; then
+	exit 0
+fi
 user=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
 if [[ -z $option ]]
 then

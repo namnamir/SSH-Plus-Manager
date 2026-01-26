@@ -48,11 +48,15 @@ else
 		
 		l_user="${red_code}[${cyan_code}$i${red_code}] ${white_code}- ${green_code}$_user${reset_code}"
 		lim="${yellow_code}Limit${white_code}: $limit${reset_code}"
-        printf '%-65s%s\n' "$l_user" "$lim"
+        printf '%-65s%b\n' "$l_user" "$lim"
 		_userPass+="\n${_oP}:${_user}"
 	done <<< "${_userT}"
 	echo ""
 	num_user=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
+	echo ""
+	menu_option "0" "BACK" "red" "yellow"
+	menu_option "00" "EXIT" "red" "yellow"
+	echo ""
 	# Use color functions for prompt - functions handle fallback internally
 	color_echo_n "Type or select a user " "green"
 	color_echo_n "[" "yellow"
@@ -62,6 +66,12 @@ else
 	color_echo_n "]" "yellow"
 	color_echo_n ": " "white"
 	read -r option
+	# Handle menu navigation
+	if [[ "$option" == "0" ]]; then
+		exit 0
+	elif [[ "$option" == "00" ]]; then
+		exit 0
+	fi
 	usuario=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
     if [[ -z $option ]]; then
 		# Use error message function - handles fallback internally

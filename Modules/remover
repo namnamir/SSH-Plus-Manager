@@ -73,6 +73,10 @@ while read _user; do
 done <<< "${_userT}"
 echo ""
 num_user=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody | wc -l)
+echo ""
+menu_option "0" "BACK" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
+echo ""
 # Use color functions for prompt
 color_echo_n "Type or select a user " "green"
 color_echo_n "[" "yellow"
@@ -82,6 +86,12 @@ color_echo_n "$num_user" "cyan"
 color_echo_n "]" "yellow"
 color_echo_n ": " "white"
 read -r option
+# Handle menu navigation
+if [[ "$option" == "0" ]]; then
+	exit 0
+elif [[ "$option" == "00" ]]; then
+	exit 0
+fi
 user=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
 if [[ -z $option ]]; then
 	echo ""

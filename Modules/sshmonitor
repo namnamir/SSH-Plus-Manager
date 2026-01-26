@@ -111,11 +111,11 @@ echo ""
         if [[ $conex -eq 0 ]]; then
            status="${red_code}Offline ${yellow_code}       "
            echo -ne "$yellow_code"
-           printf '%-17s%-14s%-10s%s\n' " $user"      "$status" "$conex/$s2ssh" "$timerr" 
+           printf '%-17s%-14s%-10s%b\n' " $user"      "$status" "$conex/$s2ssh" "$timerr" 
         else
            status="${green_code}Online${yellow_code}         "
            echo -ne "$yellow_code"
-           printf '%-17s%-14s%-10s%s\n' " $user"      "$status" "$conex/$s2ssh" "$timerr"
+           printf '%-17s%-14s%-10s%b\n' " $user"      "$status" "$conex/$s2ssh" "$timerr"
         fi
         echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
     done < "$database"
