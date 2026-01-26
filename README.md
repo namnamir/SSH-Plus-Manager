@@ -24,3 +24,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main
 ## Usage
 
 After installation, type `menu` to open the main menu.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
