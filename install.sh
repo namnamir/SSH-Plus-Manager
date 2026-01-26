@@ -434,8 +434,19 @@ color_echo_n "        • " "yellow"
 color_echo_n "INSTALLATION COMPLETED" "green"
 color_echo " •" "yellow"
 echo ""
-color_echo_n " MAIN COMMAND: " "red"
-color_echo "menu" "green"
+
+# Verify menu command is installed
+if [[ -f "/bin/menu" ]] && [[ -x "/bin/menu" ]]; then
+    color_echo_n " MAIN COMMAND: " "red"
+    color_echo "menu" "green"
+    echo ""
+    success_msg "Menu command installed successfully!"
+else
+    echo ""
+    error_msg "WARNING: Menu command not found!"
+    warning_msg "Please run: /bin/menu"
+    warning_msg "Or check if installation completed successfully."
+fi
 
 # Clean up: remove installation script and clear bash history
 # This is done for security to remove traces of the installation
