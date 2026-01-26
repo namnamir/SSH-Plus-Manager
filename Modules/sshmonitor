@@ -45,14 +45,41 @@ do
     fi
 done
 }
-# Use print_header function for colored header
-print_header " User         Status       Connection     Time   "
+# Format bytes as human-readable (K/M/G)
+_fmt_bytes() {
+	awk -v b="${1:-0}" 'BEGIN{
+		if(b>=1073741824) printf "%.1fG", b/1073741824
+		else if(b>=1048576) printf "%.1fM", b/1048576
+		else if(b>=1024) printf "%.0fK", b/1024
+		else printf "%dB", b+0
+	}'
+}
+
+# Per-user I/O (rchar≈download, wchar≈upload) from /proc/<pid>/io
+_get_user_traffic() {
+	local u="$1" rchar=0 wchar=0
+	local pids
+	pids=$(ps -u "$u" -o pid= 2>/dev/null) || true
+	for pid in $pids; do
+		[[ -z "$pid" || ! -r "/proc/$pid/io" ]] && continue
+		while read -r k v; do
+			case "$k" in rchar:) rchar=$((rchar + v));; wchar:) wchar=$((wchar + v));; esac
+		done < "/proc/$pid/io" 2>/dev/null || true
+	done
+	echo "${rchar}:${wchar}"
+}
+
+# Use print_header function for colored header (with Traffic column)
+print_header " User         Status       Conn    Time       Down / Up   "
 echo ""
 echo ""
- while read usline
-    do  
-        user="$(echo $usline | cut -d' ' -f1)"
-        s2ssh="$(echo $usline | cut -d' ' -f2)"
+_userlist=$(awk -F: '$3>=1000 {print $1}' /etc/passwd 2>/dev/null | grep -v nobody)
+for user in $_userlist; do
+        if [[ -f "$database" ]] && grep -qw "$user" "$database" 2>/dev/null; then
+            s2ssh="$(grep -w "$user" "$database" 2>/dev/null | cut -d' ' -f2)"
+        else
+            s2ssh="1"
+        fi
         if [ "$(cat /etc/passwd| grep -w $user| wc -l)" = "1" ]; then
           sqd="$(ps -u $user | grep sshd | wc -l)"
         else
@@ -101,24 +128,27 @@ echo ""
         else
           timerr="00:00:00"
         fi
-        # Use color codes for status display
+        # Per-user traffic (↓=rchar, ↑=wchar from /proc/<pid>/io)
+        _io=$(_get_user_traffic "$user")
+        _down=$(_fmt_bytes "${_io%%:*}")
+        _up=$(_fmt_bytes "${_io##*:}")
+        traffic_str="↓$_down / ↑$_up"
+
+        # Use color codes for status display (printf %b so escapes are interpreted)
         yellow_code=$(get_color_code "yellow")
         red_code=$(get_color_code "red")
         green_code=$(get_color_code "green")
         blue_code=$(get_color_code "blue")
         reset_code=$(get_reset_code)
-        
+
         if [[ $conex -eq 0 ]]; then
            status="${red_code}Offline ${yellow_code}       "
-           echo -ne "$yellow_code"
-           printf '%-17s%-14s%-10s%b\n' " $user"      "$status" "$conex/$s2ssh" "$timerr" 
         else
            status="${green_code}Online${yellow_code}         "
-           echo -ne "$yellow_code"
-           printf '%-17s%-14s%-10s%b\n' " $user"      "$status" "$conex/$s2ssh" "$timerr"
         fi
-        echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-    done < "$database"
+        printf '%b%-17s%b%-8s%-10s%-14s%b\n' "$yellow_code" " $user" "$status" "$conex/$s2ssh" "$timerr" "$traffic_str" "$reset_code"
+        echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
+done
     echo ""
     color_echo_n "Press Enter to return to menu" "yellow"
     read -r

@@ -7,6 +7,13 @@
 # This is the base URL for downloading files from the repository
 _REPO_URL="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
 
+# Version shown in installer (try local file, else fetch from repo)
+_SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+INSTALL_VERSION=""
+[[ -f "$_SCRIPT_DIR/version" ]] && INSTALL_VERSION=$(head -1 "$_SCRIPT_DIR/version" 2>/dev/null | tr -d '\r\n')
+[[ -z "$INSTALL_VERSION" ]] && INSTALL_VERSION=$(wget -qO- --timeout=3 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n')
+[[ -z "$INSTALL_VERSION" ]] && INSTALL_VERSION="?"
+
 # Load color utility functions
 # Try to source from local file first (if running from repo)
 # Otherwise download from repo and source it
@@ -65,13 +72,9 @@ clear
 # Check if script is running as root user
 # Root privileges are required to install system packages and modify system files
 if [[ "$(whoami)" != "root" ]]; then
-    color_echo_n "[" "yellow"
-    color_echo_n "Error" "red"
-    color_echo_n "] " "yellow"
-    color_echo_n "- " "white"
-    color_echo "you need to run as root" "yellow"
+    error_msg "This script must be run as root."
     rm "$HOME/Plus" > /dev/null 2>&1
-    exit 0
+    exit 1
 fi
 
 # Set up directory paths for installation files
@@ -116,7 +119,7 @@ fun_bar() {
     reset_code=$(get_reset_code)
 
     # Show the progress bar label
-    echo -ne "  ${yellow_code}WAIT ${white_code}- ${yellow_code}["
+    echo -ne "  ${yellow_code}Please wait ${white_code}- ${yellow_code}["
 
     # Keep showing progress until the command finishes
     while true; do
@@ -137,11 +140,11 @@ fun_bar() {
         sleep 1s
         tput cuu1
         tput dl1
-        echo -ne "  ${yellow_code}WAIT ${white_code}- ${yellow_code}["
+        echo -ne "  ${yellow_code}Please wait ${white_code}- ${yellow_code}["
     done
 
     # Show completion message and restore cursor
-    echo -e "${yellow_code}]${white_code} -${green_code} OK !${white_code}${reset_code}"
+    echo -e "${yellow_code}]${white_code} -${green_code} Done.${white_code}${reset_code}"
     tput cnorm
 }
 
@@ -154,7 +157,7 @@ function verif_key() {
     # Check if the key file exists
     if [[ ! -e "$_Ink/list" ]]; then
         echo ""
-        error_msg "INVALID KEY!"
+        error_msg "Invalid or missing installation key."
         rm -rf "$HOME/Plus" > /dev/null 2>&1
         sleep 2
         clear
@@ -181,33 +184,13 @@ echo ""
 
 red_code=$(get_color_code "red")
 reset_code=$(get_reset_code)
-echo -e "${red_code}════════════════════════════════════════════════════${reset_code}"
-print_header "             WELCOME TO SSHPLUS MANAGER             "
-echo -e "${red_code}════════════════════════════════════════════════════${reset_code}"
+echo -e "${red_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
+print_header "       SSH Plus Manager v${INSTALL_VERSION}       "
+echo -e "${red_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
 echo ""
-color_echo_n "• " "red"
-color_echo "THIS SCRIPT IS SET AS TOOLS FOR" "yellow"
-color_echo "  NETWORK, SYSTEM AND USER MANAGEMENT" "yellow"
+color_echo "  SSH Plus Manager provides network, system and user management tools." "yellow"
+color_echo "  For best display, use a terminal with dark theme." "cyan"
 echo ""
-color_echo_n "• " "green"
-color_echo "UTILIZE THE DARK THEME IN YOUR TERMINAL" "yellow"
-color_echo "  TO A BETTER EXPERIENCE AND VISUALIZATION!" "yellow"
-echo ""
-color_echo_n "≠×≠×≠×[" "red"
-color_echo_n " • " "yellow"
-color_echo_n "   a new version of SSH PLUS MANAGER   " "green"
-color_echo_n " •" "yellow"
-color_echo "]≠×≠×≠×" "red"
-echo ""
-
-# Ask user if they want to generate/verify the installation key
-color_echo_n "GENERATE KEY [Y/N]: " "cyan"
-read -r x
-
-# Exit if user chooses not to proceed
-if [[ "$x" = @(n|N) ]]; then
-    exit 0
-fi
 
 # Fix SSH port configuration if it was changed
 # Change port 22222 back to standard port 22
@@ -223,8 +206,7 @@ fi
 
 # Download and verify the installation key file
 echo ""
-color_echo_n "CHECKING... " "cyan"
-color_echo " 16983:16085" "white"
+color_echo "Verifying installation key..." "cyan"
 
 # Ensure the directory exists
 mkdir -p "$_Ink" > /dev/null 2>&1
@@ -238,24 +220,15 @@ if ! wget -P "$_Ink" "$_REPO_URL/Install/list" > /dev/null 2>&1; then
     # Try with curl as fallback
     if ! curl -sL "$_REPO_URL/Install/list" -o "$_Ink/list" > /dev/null 2>&1; then
         echo ""
-        error_msg "ERROR: Failed to download key file!"
-        warning_msg "Please check your internet connection and try again."
-        warning_msg "URL: $_REPO_URL/Install/list"
+        error_msg "Failed to download installation key."
+        warning_msg "Check your internet connection and try again."
         exit 1
     fi
 fi
 
-# Verify the file was downloaded and is not empty
 if [[ ! -s "$_Ink/list" ]]; then
     echo ""
-    error_msg "ERROR: Downloaded file is empty or invalid!"
-    exit 1
-fi
-
-# Verify the file was downloaded and is not empty
-if [[ ! -s "$_Ink/list" ]]; then
-    echo ""
-    error_msg "ERROR: Downloaded file is empty or invalid!"
+    error_msg "Downloaded key file is empty or invalid."
     exit 1
 fi
 
@@ -273,11 +246,10 @@ chmod +x /bin/h > /dev/null 2>&1
 rm version* > /dev/null 2>&1
 if ! wget "$_REPO_URL/version" > /dev/null 2>&1; then
     echo ""
-    warning_msg "WARNING: Could not download version file"
+    warning_msg "Could not fetch version file; update checks may be limited."
 fi
-# Key verification successful
 echo ""
-success_msg "KEY OK!"
+success_msg "Installation key verified."
 sleep 1s
 echo ""
 
@@ -290,23 +262,15 @@ if [[ -f "$HOME/users.db" ]]; then
     echo ""
     echo -e "${blue_code}═════════════════════════════════════════════════${reset_code}"
     echo ""
-    color_echo_n "                 • " "yellow"
-    color_echo_n "ATTENTION " "red"
-    color_echo " •" "yellow"
+    color_echo "An existing user database (users.db) was found." "yellow"
+    color_echo "Keep it and preserve connection limits, or create a new one?" "yellow"
     echo ""
-    color_echo_n "A User Database " "yellow"
-    color_echo_n "(users.db) " "green"
-    color_echo "Was" "yellow"
-    color_echo "Found! Do you want to keep it preserving the limit" "yellow"
-    color_echo "of users' Simultaneous Connections? Or Do You Want to" "yellow"
-    color_echo "create a new database ?" "yellow"
-    echo ""
-    menu_option "1" "Keep Current Database" "red" "yellow"
-    menu_option "2" "Create a New Database" "red" "yellow"
+    menu_option "1" "Keep current database" "red" "yellow"
+    menu_option "2" "Create new database" "red" "yellow"
     echo ""
     echo -e "${blue_code}═════════════════════════════════════════════════${reset_code}"
     echo ""
-    color_echo_n "Option ?: " "green"
+    color_echo_n "Choice [1-2]: " "green"
     read -r -e -i 1 optiondb
 else
     # No existing database, create a new one
@@ -324,15 +288,8 @@ clear
 print_header " WAITING FOR INSTALLATION"
 echo ""
 echo ""
-color_echo_n "          [" "yellow"
-color_echo_n "!" "red"
-color_echo_n "] " "yellow"
-color_echo_n "UPDATING SYSTEM " "green"
-color_echo_n "[" "yellow"
-color_echo_n "!" "red"
-color_echo "] " "yellow"
-echo ""
-color_echo "        UPDATES TAKE A LITTLE TIME!" "yellow"
+color_echo "Updating system packages..." "green"
+color_echo "This may take a few minutes." "yellow"
 echo ""
 
 # Function to update system package lists
@@ -354,15 +311,8 @@ fun_bar 'fun_attlist'
 
 clear
 echo ""
-color_echo_n "          [" "yellow"
-color_echo_n "!" "red"
-color_echo_n "] " "yellow"
-color_echo_n "INSTALLING PACKAGES " "green"
-color_echo_n "[" "yellow"
-color_echo_n "!" "red"
-color_echo "] " "yellow"
-echo ""
-color_echo "  SOME PACKAGES ARE NECESSARY TO INSTALL !" "yellow"
+color_echo "Installing required packages..." "green"
+color_echo "Please wait." "yellow"
 echo ""
 
 # Function to install required packages
@@ -410,15 +360,8 @@ fi
 
 clear
 echo ""
-color_echo_n "              [" "yellow"
-color_echo_n "!" "red"
-color_echo_n "] " "yellow"
-color_echo_n "FINALIZING " "green"
-color_echo_n "[" "yellow"
-color_echo_n "!" "red"
-color_echo "] " "yellow"
-echo ""
-color_echo "    COMPLETING FUNCTIONS AND DEFINITIONS! " "yellow"
+color_echo "Finalizing installation..." "green"
+color_echo "Configuring components." "yellow"
 echo ""
 
 # Run the main installation script that sets up all modules
@@ -434,22 +377,17 @@ echo ""
 cd "$HOME" || exit 1
 
 # Installation complete message
-color_echo_n "        • " "yellow"
-color_echo_n "INSTALLATION COMPLETED" "green"
-color_echo " •" "yellow"
+echo ""
+success_msg "Installation completed successfully."
 echo ""
 
-# Verify menu command is installed
 if [[ -f "/bin/menu" ]] && [[ -x "/bin/menu" ]]; then
-    color_echo_n " MAIN COMMAND: " "red"
-    color_echo "menu" "green"
+    color_echo "  Run the manager with: " "yellow"
+    color_echo "  menu" "green"
     echo ""
-    success_msg "Menu command installed successfully!"
 else
-    echo ""
-    error_msg "WARNING: Menu command not found!"
-    warning_msg "Please run: /bin/menu"
-    warning_msg "Or check if installation completed successfully."
+    error_msg "Menu command was not installed correctly."
+    warning_msg "Try running: /bin/menu"
 fi
 
 # Clean up: remove installation script and clear bash history

@@ -647,7 +647,7 @@ menu() {
 		cyan_code=$(get_color_code "cyan")
 		reset_code=$(get_reset_code)
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
-		print_header_red "               ⇱ SSHPLUS MANAGER ⇲                "
+		print_header_red "            ⇱ SSH PLUS MANAGER v${_ver_local} ⇲            "
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 		printf "  ${red_code}IPv4:${white_code} %s${reset_code}\n" "$_ipv4"
 		printf "  ${red_code}IPv6:${white_code} %s${reset_code}\n" "$_ipv6"
@@ -659,7 +659,7 @@ menu() {
 		printf "  ${red_code}Used ports:${white_code} %s${reset_code}\n" "$_ports"
 		printf "  ${red_code}Version:${white_code} %s${reset_code}\n" "$_ver_local"
 		if [[ -n "$_ver_update" ]]; then
-			echo -e "  ${yellow_code}[!] Update available: v${_ver_update} — use [16] MORE → [24] UPDATE${reset_code}"
+			echo -e "  ${yellow_code}[!] Update available: v${_ver_update} — use [20] UPDATE${reset_code}"
 		fi
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 		echo ""
@@ -686,6 +686,9 @@ menu() {
 		1 | 01)
 			clear
 			criarusuario
+			echo ""
+			color_echo_n "Press ENTER to return to menu (copy the user info above first)..." "yellow"
+			read -r
 			;;
 		2 | 02)
 			clear
@@ -694,6 +697,8 @@ menu() {
 		3 | 03)
 			clear
 			remover
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			sleep 3
 			;;
 		4 | 04)
@@ -703,16 +708,22 @@ menu() {
 		5 | 05)
 			clear
 			mudardata
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			sleep 3
 			;;
 		6 | 06)
 			clear
 			alterarlimite
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			sleep 3
 			;;
 		7 | 07)
 			clear
 			alterarsenha
+			_ret=$?
+			[[ $_ret -eq 99 ]] && exit 0
 			sleep 3
 			;;
 		8 | 08)

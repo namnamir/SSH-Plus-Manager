@@ -39,12 +39,17 @@ echo ""
 menu_option "1" "REMOVE A USER" "red" "yellow"
 menu_option "2" "REMOVE ALL USERS" "red" "yellow"
 menu_option "3" "BACK" "red" "yellow"
+menu_option "0" "BACK" "red" "yellow"
+menu_option "00" "EXIT" "red" "yellow"
 echo ""
 # Use color functions for prompt
 color_echo_n "PLEASE SELECT FROM OPTIONS" "green"
 color_echo_n " ?" "red"
 color_echo_n " : " "white"
 read -r -e -i 1 resp
+resp="${resp//[[:space:]]/}"
+[[ "$resp" == "0" ]] && exit 0
+[[ "$resp" == "00" ]] && exit 99
 if [[ "$resp" = "1" ]]; then
 clear
 tput setaf 7
@@ -86,11 +91,12 @@ color_echo_n "$num_user" "cyan"
 color_echo_n "]" "yellow"
 color_echo_n ": " "white"
 read -r option
+option="${option//[[:space:]]/}"
 # Handle menu navigation
 if [[ "$option" == "0" ]]; then
 	exit 0
 elif [[ "$option" == "00" ]]; then
-	exit 0
+	exit 99
 fi
 user=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
 if [[ -z $option ]]; then

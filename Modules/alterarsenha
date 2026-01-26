@@ -23,7 +23,8 @@ echo ""
 color_echo "LIST OF USERS AND THEIR PASSWORDS:" "yellow"
 echo ""
 
-_userT=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody)
+# List only users that currently exist in /etc/passwd (use fresh read every time)
+_userT=$(awk -F: '$3>=1000 {print $1}' /etc/passwd 2>/dev/null | grep -v nobody)
 i=0
 unset _userPass
 while read _user; do
@@ -63,11 +64,12 @@ color_echo_n "$num_user" "cyan"
 color_echo_n "]" "yellow"
 color_echo_n ": " "white"
 read -r option
+option="${option//[[:space:]]/}"
 # Handle menu navigation
 if [[ "$option" == "0" ]]; then
 	exit 0
 elif [[ "$option" == "00" ]]; then
-	exit 0
+	exit 99
 fi
 user=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
 if [[ -z $option ]]

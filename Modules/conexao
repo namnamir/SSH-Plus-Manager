@@ -1807,7 +1807,7 @@ exit 0' >$RCLOCAL
 			echo -e "${red_code}[${cyan_code}05${red_code}] ${white_code}• ${yellow_code}SOCKS PROXY $sts4${reset_code}"
 			echo -e "${red_code}[${cyan_code}06${red_code}] ${white_code}• ${yellow_code}SSL TUNNEL $sts3${reset_code}"
 			echo -e "${red_code}[${cyan_code}07${red_code}] ${white_code}• ${yellow_code}SSLH MULTIPLEX $sts7${reset_code}"
-			echo -e "${red_code}[${cyan_code}08${red_code}] ${white_code}• ${yellow_code}BACK ${green_code}<${yellow_code}<${red_code}<${reset_code}"
+			echo -e "${red_code}[${cyan_code} 0${red_code}] ${white_code}• ${yellow_code}BACK ${green_code}<${yellow_code}<${red_code}<${reset_code}"
 			echo -e "${red_code}[${cyan_code}00${red_code}] ${white_code}• ${yellow_code}EXIT ${green_code}<${yellow_code}<${red_code}<${reset_code}"
 			echo ""
 			echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"

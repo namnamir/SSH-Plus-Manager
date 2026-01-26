@@ -21,11 +21,20 @@ if [ ! -f "$database" ]; then
 	echo ""
 	exit 1
 else
-	# Display header - use color function which handles fallback internally
+	# Keep users.db in sync: remove entries for users that no longer exist in /etc/passwd
+	_existing=$(awk -F: '$3>=1000 {print $1}' /etc/passwd 2>/dev/null | grep -v nobody)
+	_tmp=$(mktemp 2>/dev/null || echo /tmp/ulim_$$)
+	: > "$_tmp"
+	while read -r u lim _; do
+		echo "$_existing" | grep -qxF "$u" 2>/dev/null && echo "$u $lim" >> "$_tmp"
+	done < "$database" 2>/dev/null
+	[[ -s "$_tmp" ]] && mv "$_tmp" "$database" || true
+	rm -f "$_tmp" 2>/dev/null
+	# List only users that currently exist in /etc/passwd
 	echo ""
 	color_echo "LIST OF USERS AND THEIR LIMITS:" "yellow"
 	echo ""
-	_userT=$(awk -F: '$3>=1000 {print $1}' /etc/passwd | grep -v nobody)
+	_userT=$(awk -F: '$3>=1000 {print $1}' /etc/passwd 2>/dev/null | grep -v nobody)
 	i=0
 	unset _userPass
 	while read _user; do
@@ -66,11 +75,12 @@ else
 	color_echo_n "]" "yellow"
 	color_echo_n ": " "white"
 	read -r option
+	option="${option//[[:space:]]/}"
 	# Handle menu navigation
 	if [[ "$option" == "0" ]]; then
 		exit 0
 	elif [[ "$option" == "00" ]]; then
-		exit 0
+		exit 99
 	fi
 	usuario=$(echo -e "${_userPass}" | grep -E "\b$option\b" | cut -d: -f2)
     if [[ -z $option ]]; then
