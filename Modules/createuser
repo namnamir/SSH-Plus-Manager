@@ -132,10 +132,21 @@ _hostname_short() {
 	printf "%s" "$h"
 }
 
+_trim() {
+	# Trim leading/trailing whitespace
+	local s="${1:-}"
+	s="${s#"${s%%[![:space:]]*}"}"
+	s="${s%"${s##*[![:space:]]}"}"
+	printf "%s" "$s"
+}
+
 _print_kv_aligned() {
-	# Args: label value (label includes emoji)
-	local label="$1" value="$2"
-	printf "%b%-18s%b %b%s%b\n" "$(c ui_label)" "$label" "$(reset)" "$(c ui_value)" "$value" "$(reset)"
+	# Args: icon key value (icon is its own column so emoji width won't shift values)
+	local icon="$1" key="$2" value="$3"
+	printf "%b%s%b %b%-16s%b %b%s%b\n" \
+		"$(c ui_value)" "$icon" "$(reset)" \
+		"$(c ui_label)" "$key" "$(reset)" \
+		"$(c ui_value)" "$value" "$(reset)"
 }
 # Legacy ANSI vars (prefer msg_err/banner_info from colors); remove if unused
 cor1='\033[41;1;37m'
@@ -467,6 +478,7 @@ while true; do
 	if [[ -z "$password" ]]; then
 		password="$(_gen_password)"
 	fi
+	password="$(_trim "$password")"
 	if [[ ${#password} -lt 4 ]]; then
 		msg_err "Password too short (min 4)."
 		sleep 1
@@ -477,16 +489,19 @@ while true; do
 	# Remark
 	printf "%b🏷 Remark:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_remark"
 	read -r remarks
+	remarks="$(_trim "$remarks")"
 	[[ -z "$remarks" ]] && remarks="$_default_remark"
 
 	# Host / port
 	printf "%b🌍 SSH Host:%b [%s] " "$(c ui_label)" "$(reset)" "${_default_host:-}"
 	read -r ssh_host
+	ssh_host="$(_trim "$ssh_host")"
 	[[ -z "$ssh_host" ]] && ssh_host="$_default_host"
 	[[ -z "$ssh_host" ]] && ssh_host="N/A"
 
 	printf "%b🔌 SSH Port:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_port"
 	read -r ssh_port
+	ssh_port="$(_trim "$ssh_port")"
 	[[ -z "$ssh_port" ]] && ssh_port="$_default_port"
 	if ! _is_int "$ssh_port" || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
 		msg_err "Invalid port."
@@ -498,6 +513,7 @@ while true; do
 	# Expiration + limit
 	printf "%b⏳ Expiration (days):%b [%s] " "$(c ui_label)" "$(reset)" "$_default_days"
 	read -r dias
+	dias="$(_trim "$dias")"
 	[[ -z "$dias" ]] && dias="$_default_days"
 	if ! _is_int "$dias" || [[ "$dias" -lt 1 ]]; then
 		msg_err "Expiration days must be a positive number."
@@ -508,6 +524,7 @@ while true; do
 
 	printf "%b🔗 Connection limit:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_limit"
 	read -r sshlimiter
+	sshlimiter="$(_trim "$sshlimiter")"
 	[[ -z "$sshlimiter" ]] && sshlimiter="$_default_limit"
 	if ! _is_int "$sshlimiter" || [[ "$sshlimiter" -lt 1 ]]; then
 		msg_err "Connection limit must be a positive number."
@@ -590,13 +607,13 @@ import_link="$(_npvt_link_from_json "$config_json" 2>/dev/null || true)"
 clear
 title_line "SSH ACCOUNT CREATED"
 echo ""
-_print_kv_aligned "🌍 Host:" "$ssh_host"
-_print_kv_aligned "🔌 Port:" "$ssh_port"
-_print_kv_aligned "👤 Username:" "$username"
-_print_kv_aligned "🔒 Password:" "$password"
-_print_kv_aligned "🏷 Remark:" "$remarks"
-_print_kv_aligned "⏳ Expires in:" "${gui} (${dias}d)"
-_print_kv_aligned "🔗 Conn limit:" "$sshlimiter"
+_print_kv_aligned "🌍" "Host:" "$ssh_host"
+_print_kv_aligned "🔌" "Port:" "$ssh_port"
+_print_kv_aligned "👤" "Username:" "$username"
+_print_kv_aligned "🔒" "Password:" "$password"
+_print_kv_aligned "🔖" "Remark:" "$remarks"
+_print_kv_aligned "⏳" "Expires in:" "${gui} (${dias}d)"
+_print_kv_aligned "🔗" "Conn limit:" "$sshlimiter"
 
 echo ""
 printf "%bImport link:%b\n" "$(c ui_label)" "$(reset)"
