@@ -1,20 +1,22 @@
 #!/bin/bash
 # menu – main SSH Plus Manager loop; sources colors and runs the main menu.
 
-# Load color helpers (install path vs dev path)
-if [[ -f /etc/SSHPlus/colors ]]; then
-	source /etc/SSHPlus/colors
-elif [[ -f /bin/colors ]]; then
-	source /bin/colors
-elif [[ -f "$(dirname "$0")/colors" ]]; then
-	source "$(dirname "$0")/colors"
-fi
-
-# Detect run-from-repo (no install): so we don't require /usr/lib/sshplus or remove /bin/menu
+# Detect run-from-repo first (needed for color path)
 _mod_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 _repo_root="$(cd "${_mod_dir}/.." 2>/dev/null && pwd)"
 if [[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]]; then
 	export SSHPLUS_FROM_REPO=1
+fi
+
+# Load color helpers: when running from repo, use repo's colors; otherwise installed paths
+if [[ -n "${SSHPLUS_FROM_REPO:-}" ]] && [[ -f "${_mod_dir}/colors" ]]; then
+	source "${_mod_dir}/colors"
+elif [[ -f /etc/SSHPlus/colors ]]; then
+	source /etc/SSHPlus/colors
+elif [[ -f /bin/colors ]]; then
+	source /bin/colors
+elif [[ -f "${_mod_dir}/colors" ]]; then
+	source "${_mod_dir}/colors"
 fi
 unset -v _mod_dir _repo_root
 

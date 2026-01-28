@@ -16,10 +16,11 @@ fi
 # -------------------- feature detection --------------------
 _is_tty() { [[ -t 1 ]]; }
 
+# Only disable color when explicitly requested (NO_COLOR) or TERM=dumb.
+# Do not require a TTY or non-empty TERM; many SSH/screen sessions still support color.
 _no_color() {
   [[ -n "${NO_COLOR:-}" ]] && return 0
-  [[ "${TERM:-}" == "dumb" || -z "${TERM:-}" ]] && return 0
-  _is_tty || return 0
+  [[ "${TERM:-}" == "dumb" ]] && return 0
   return 1
 }
 
