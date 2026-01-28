@@ -292,11 +292,17 @@ install_deps() {
 	fi
 	_msg_info "Installing missing dependencies…"
 	log "apt-get install -y ${MISSING_DEPS[*]}"
-	if ! apt-get update -y >/dev/null 2>&1; then
-		step_warn "apt-get update failed (continuing, but deps may be missing)."
+	# Update index first (required for install to find packages)
+	if ! apt-get update -y >>"$LOG_FILE" 2>&1; then
+		step_warn "apt-get update failed (see $LOG_FILE)."
 	fi
-	if ! apt-get install -y "${MISSING_DEPS[@]}" >/dev/null 2>&1; then
-		step_warn "Some dependencies could not be installed. Check $LOG_FILE for details."
+	# Run install with errors visible so user sees why a package failed
+	apt-get install -y "${MISSING_DEPS[@]}" 2>&1 | tee -a "$LOG_FILE"
+	_install_ret=${PIPESTATUS[0]}
+	if [[ "$_install_ret" -eq 0 ]]; then
+		step_ok "Dependencies installed"
+	else
+		step_warn "Some packages could not be installed. See output above or $LOG_FILE."
 	fi
 }
 
@@ -438,7 +444,14 @@ run_install_list() {
 
 apply_serversettings() {
 	if [[ "$WITH_SERVER_SETTINGS" -ne 1 ]]; then
-		if ! ask_yes_no "Apply server settings now? [y/N]:" "N"; then
+		printf "\n"
+		# Stand-out prompt: emoji + color so it's not lost in the text
+		_yellow=$(get_color_code "yellow" 2>/dev/null || printf "\033[1;33m")
+		_reset=$(get_reset_code 2>/dev/null || printf "\033[0m")
+		printf "%b⚙  Apply server settings now? [y/N]:%b " "$_yellow" "$_reset"
+		read -r _apply_ans || _apply_ans=""
+		[[ -z "$_apply_ans" ]] && _apply_ans="N"
+		if ! [[ "$_apply_ans" =~ ^[Yy]$ ]]; then
 			return 0
 		fi
 	fi
@@ -528,7 +541,7 @@ main() {
 	printf "• Run: menu\n"
 	printf "• Update: menu → [19] Update script\n"
 	printf "• Uninstall: removescript (menu → SYSTEM → Remove script)\n"
-	printf "• Server settings: menu → [13] Server settings (or apply now below)\n"
+	printf "• Server settings: menu → [13] Server settings (or apply now below)\n\n"
 
 	# Optionally run server settings module
 	apply_serversettings
