@@ -14,10 +14,11 @@
 _REPO_URL="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
 _SCRIPT_DIR=""
 # Try to detect script directory (works when run from file, not from curl pipe)
-if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ "${BASH_SOURCE[0]}" != *"/dev/fd/"* ]]; then
+# When run via curl pipe, $0 is /dev/fd/63 or similar, so skip detection
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ "${BASH_SOURCE[0]}" != *"/dev/fd/"* ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
 	_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _SCRIPT_DIR=""
 fi
-if [[ -z "$_SCRIPT_DIR" ]] && [[ -n "${0:-}" ]] && [[ "$0" != *"/dev/fd/"* ]] && [[ "$0" != "bash" ]]; then
+if [[ -z "$_SCRIPT_DIR" ]] && [[ -n "${0:-}" ]] && [[ "$0" != *"/dev/fd/"* ]] && [[ "$0" != "bash" ]] && [[ "$0" != "-bash" ]] && [[ -f "$0" ]]; then
 	_SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || _SCRIPT_DIR=""
 fi
 
@@ -29,7 +30,12 @@ if [[ -f "$_SCRIPT_DIR/version" ]]; then
 	INSTALL_VERSION=$(head -1 "$_SCRIPT_DIR/version" 2>/dev/null | tr -d '\r\n')
 fi
 if [[ -z "$INSTALL_VERSION" ]]; then
-	INSTALL_VERSION=$(wget -qO- --timeout=3 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n')
+	# Prefer curl (always present when run via curl-pipe); fallback to wget
+	if command -v curl >/dev/null 2>&1; then
+		INSTALL_VERSION=$(curl -sfL --max-time 5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n')
+	else
+		INSTALL_VERSION=$(wget -qO- --timeout=5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n')
+	fi
 fi
 [[ -z "$INSTALL_VERSION" ]] && INSTALL_VERSION="?"
 
@@ -75,7 +81,10 @@ elif [[ -f /bin/colors ]]; then
 	source /bin/colors
 else
 	_tmp_colors="/tmp/sshplus_colors_$$"
-	if wget -q "$_REPO_URL/Modules/colors" -O "$_tmp_colors" 2>/dev/null; then
+	if command -v curl >/dev/null 2>&1 && curl -sfL --max-time 10 "$_REPO_URL/Modules/colors" -o "$_tmp_colors" 2>/dev/null; then
+		source "$_tmp_colors"
+		rm -f "$_tmp_colors" 2>/dev/null
+	elif command -v wget >/dev/null 2>&1 && wget -q "$_REPO_URL/Modules/colors" -O "$_tmp_colors" 2>/dev/null; then
 		source "$_tmp_colors"
 		rm -f "$_tmp_colors" 2>/dev/null
 	else
@@ -310,12 +319,22 @@ verif_key() {
 download_install_list() {
 	mkdir -p "$_Ink" >/dev/null 2>&1
 	rm -f "$_Ink/list" >/dev/null 2>&1
-	if ! wget -q -P "$_Ink" "$_REPO_URL/Install/list" 2>/dev/null; then
-		if ! curl -sfL "$_REPO_URL/Install/list" -o "$_Ink/list" 2>/dev/null; then
+	# Prefer curl (always present when run via curl-pipe)
+	if command -v curl >/dev/null 2>&1; then
+		if ! curl -sfL --max-time 30 "$_REPO_URL/Install/list" -o "$_Ink/list" 2>/dev/null; then
 			step_err "Failed to download installer payload (Install/list)."
 			step_warn "Check network or try again later."
 			exit 1
 		fi
+	elif command -v wget >/dev/null 2>&1; then
+		if ! wget -q -P "$_Ink" "$_REPO_URL/Install/list" 2>/dev/null; then
+			step_err "Failed to download installer payload (Install/list)."
+			step_warn "Check network or try again later."
+			exit 1
+		fi
+	else
+		step_err "Neither curl nor wget found. Install one of them to run this installer."
+		exit 1
 	fi
 	if [[ ! -s "$_Ink/list" ]]; then
 		step_err "Downloaded Install/list is empty or invalid."
@@ -349,11 +368,13 @@ initialize_db() {
 
 update_version_files() {
 	local tmp="/tmp/sshplus_version_$$" val=""
-	if wget -qO- --timeout=5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n' >"$tmp"; then
+	# Prefer curl (same as installer invocation)
+	if command -v curl >/dev/null 2>&1; then
+		curl -sfL --max-time 5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n' >"$tmp" || true
 		[[ -s "$tmp" ]] && val=$(cat "$tmp")
 	fi
-	if [[ -z "$val" ]]; then
-		curl -sfL --max-time 5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n' >"$tmp" || true
+	if [[ -z "$val" ]] && command -v wget >/dev/null 2>&1; then
+		wget -qO- --timeout=5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n' >"$tmp" || true
 		[[ -s "$tmp" ]] && val=$(cat "$tmp")
 	fi
 	rm -f "$tmp" 2>/dev/null || true
