@@ -525,9 +525,10 @@ main() {
 	printf "• Log:       %s\n" "$LOG_FILE"
 
 	printf "\nNext steps\n"
-	printf "1) Run: menu\n"
-	printf "2) Update: menu → [19] Update script\n"
-	printf "3) Uninstall: removescript (menu → SYSTEM → Remove script)\n"
+	printf "• Run: menu\n"
+	printf "• Update: menu → [19] Update script\n"
+	printf "• Uninstall: removescript (menu → SYSTEM → Remove script)\n"
+	printf "• Server settings: menu → [13] Server settings (or apply now below)\n"
 
 	# Optionally run server settings module
 	apply_serversettings
