@@ -134,20 +134,31 @@ debug() {
 }
 
 term_cols() { tput cols 2>/dev/null || printf "80"; }
+# Thin horizontal rule (Unicode U+2500) across terminal width
 hr() {
-	local cols; cols=$(term_cols)
-	printf "%*s\n" "$cols" "" | tr ' ' '─'
+	local cols i line
+	cols=$(term_cols)
+	[[ -z "$cols" || ! "$cols" =~ ^[0-9]+$ ]] && cols=80
+	[[ "$cols" -gt 200 ]] && cols=200
+	line=""
+	i=0
+	while [[ "$i" -lt "$cols" ]]; do
+		line="${line}─"
+		((i++)) || true
+	done
+	printf "%s\n" "$line"
 }
 
 title() {
-	local cyan reset
+	local cyan red reset
 	cyan=$(get_color_code "cyan" 2>/dev/null || printf "")
+	red=$(get_color_code "red" 2>/dev/null || printf "\033[1;31m")
 	reset=$(get_reset_code 2>/dev/null || printf "\033[0m")
 	printf "%b _____ _____ _____    _____ _            _____%b\n" "$cyan" "$reset"
 	printf "%b|   __|   __|  |  |  |  _  | |_ _ ___   |     |___ ___ ___ ___ ___ ___%b\n" "$cyan" "$reset"
 	printf "%b|__   |__   |     |  |   __| | | |_ -|  | | | | .'|   | .'| . | -_|  _|%b\n" "$cyan" "$reset"
 	printf "%b|_____|_____|__|__|  |__|  |_|___|___|  |_|_|_|__,|_|_|__,|_  |___|_|%b\n" "$cyan" "$reset"
-	printf "%b                                                          |___|v%s%b\n" "$cyan" "$INSTALL_VERSION" "$reset"
+	printf "%b                                                          |___|%bv%s%b\n" "$cyan" "$red" "$INSTALL_VERSION" "$reset"
 	hr
 }
 
@@ -213,6 +224,23 @@ check_existing_install() {
 	fi
 }
 
+# Preflight: show required tools (curl, jq, bc, etc.) – one line
+preflight_required_tools() {
+	local required=(curl jq bc)
+	local missing=() ok=1
+	for cmd in "${required[@]}"; do
+		if ! command -v "$cmd" >/dev/null 2>&1; then
+			missing+=("$cmd")
+			ok=0
+		fi
+	done
+	if [[ "$ok" -eq 1 ]]; then
+		step_ok "Required tools: curl jq bc (ok)"
+	else
+		step_warn "Required tools: missing ${missing[*]}"
+	fi
+}
+
 print_preflight() {
 	printf "\nPreflight\n"
 	require_root
@@ -220,6 +248,7 @@ print_preflight() {
 	check_network
 	disk_free
 	check_existing_install
+	preflight_required_tools
 }
 
 # -----------------------------------------------------------------------------
@@ -261,7 +290,7 @@ install_deps() {
 		step_err "apt is not available. Install missing tools manually: ${MISSING_DEPS[*]}"
 		exit 1
 	fi
-	info "Installing dependencies with apt: ${MISSING_DEPS[*]}"
+	_msg_info "Installing missing dependencies…"
 	log "apt-get install -y ${MISSING_DEPS[*]}"
 	if ! apt-get update -y >/dev/null 2>&1; then
 		step_warn "apt-get update failed (continuing, but deps may be missing)."
@@ -430,7 +459,6 @@ main() {
 	title
 	print_preflight
 
-	printf "\nPlan\n"
 	print_plan
 	hr
 
