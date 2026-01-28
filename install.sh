@@ -31,13 +31,13 @@ else
         source "$_tmp_colors"
         rm -f "$_tmp_colors" 2>/dev/null
     else
-        # If download fails, define minimal fallback functions
+        # If download fails, define minimal fallback (new API names)
         color_echo() { echo -e "\033[1;37m$1\033[0m"; }
         color_echo_n() { echo -ne "\033[1;37m$1\033[0m"; }
-        error_msg() { echo -e "\033[1;31m$1\033[0m"; }
-        success_msg() { echo -e "\033[1;32m$1\033[0m"; }
-        warning_msg() { echo -e "\033[1;33m$1\033[0m"; }
-        info_msg() { echo -e "\033[1;36m$1\033[0m"; }
+        msg_err()  { echo -e "\033[1;31m✖ $1\033[0m"; }
+        msg_ok()   { echo -e "\033[1;32m✔ $1\033[0m"; }
+        msg_warn() { echo -e "\033[1;33m⚠ $1\033[0m"; }
+        msg_info() { echo -e "\033[1;36mℹ $1\033[0m"; }
         menu_option() { echo -e "\033[1;31m[\033[1;36m$1\033[1;31m] \033[1;33m$2\033[0m"; }
         get_color_code() {
             case "$1" in
@@ -51,25 +51,15 @@ else
             esac
         }
         get_reset_code() { echo -n "\033[0m"; }
-        print_header() {
-            tput setab 4 2>/dev/null
-            tput bold 2>/dev/null
-            echo -e "\033[44;1;37m$1\033[0m"
-            tput sgr0 2>/dev/null
-        }
-        print_header_red() {
-            tput setab 1 2>/dev/null
-            tput bold 2>/dev/null
-            echo -e "\033[41;1;37m$1\033[0m"
-            tput sgr0 2>/dev/null
-        }
+        banner_info()   { echo -e "\033[44;1;37m $1 \033[0m"; }
+        banner_danger() { echo -e "\033[41;1;37m $1 \033[0m"; }
     fi
 fi
 
 # Check if script is running as root user
 # Root privileges are required to install system packages and modify system files
 if [[ "$(whoami)" != "root" ]]; then
-    error_msg "This script must be run as root."
+    msg_err "This script must be run as root."
     rm "$HOME/Plus" > /dev/null 2>&1
     exit 1
 fi
@@ -154,7 +144,7 @@ function verif_key() {
     # Check if the key file exists
     if [[ ! -e "$_Ink/list" ]]; then
         echo ""
-        error_msg "Invalid or missing installation key."
+        msg_err "Invalid or missing installation key."
         rm -rf "$HOME/Plus" > /dev/null 2>&1
         sleep 2
         clear
@@ -182,9 +172,8 @@ echo ""
 red_code=$(get_color_code "red")
 reset_code=$(get_reset_code)
 echo -e "${red_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
-print_header "                SSH Plus Manager v${INSTALL_VERSION}                   "
+banner_info "                SSH Plus Manager v${INSTALL_VERSION}                   "
 echo -e "${red_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
-echo ""
 color_echo "  SSH Plus Manager provides network, system and user management tools." "yellow"
 color_echo "  For best display, use a terminal with dark theme." "cyan"
 echo ""
@@ -202,44 +191,29 @@ else
 fi
 
 # Download and verify the installation key file
-echo ""
-color_echo "Verifying installation key..." "cyan"
-
-# Ensure the directory exists
 mkdir -p "$_Ink" > /dev/null 2>&1
-
-# Remove old file if it exists
 rm "$_Ink/list" > /dev/null 2>&1
 
-# Download the key file from GitHub repository
-# Try downloading with wget
 if ! wget -P "$_Ink" "$_REPO_URL/Install/list" > /dev/null 2>&1; then
-    # Try with curl as fallback
     if ! curl -sL "$_REPO_URL/Install/list" -o "$_Ink/list" > /dev/null 2>&1; then
-        echo ""
-        error_msg "Failed to download installation key."
-        warning_msg "Check your internet connection and try again."
+        msg_err "Failed to download installation key."
+        msg_warn "Check your internet connection and try again."
         exit 1
     fi
 fi
 
 if [[ ! -s "$_Ink/list" ]]; then
-    echo ""
-    error_msg "Downloaded key file is empty or invalid."
+    msg_err "Downloaded key file is empty or invalid."
     exit 1
 fi
 
-# Verify the downloaded key file
 verif_key
-
-# Wait a moment for file operations to complete
-sleep 3s
 
 # Create a shortcut command 'h' that runs the menu
 echo "/bin/menu" > /bin/h
 chmod +x /bin/h > /dev/null 2>&1
 
-# Download the version file and persist it for update checks (menu reads /etc/SSHPlus/version or /bin/version)
+# Download the version file and persist it for update checks
 _ver_tmp="/tmp/sshplus_version_$$"
 _ver_value=""
 if wget -qO- --timeout=5 "$_REPO_URL/version" 2>/dev/null | head -1 | tr -d '\r\n' > "$_ver_tmp"; then
@@ -253,37 +227,27 @@ if [[ -n "$_ver_value" ]]; then
 	echo "$_ver_value" > /etc/SSHPlus/version 2>/dev/null
 	echo "$_ver_value" > /bin/version 2>/dev/null
 else
-	echo ""
-	warning_msg "Could not fetch version file; update checks may be limited."
+	msg_warn "Could not fetch version file; update checks may be limited."
 fi
-# Fetch and persist public IP so menu and user-creation show it even before list runs
+
 _ip_val=""
 _ip_val=$(wget -qO- --timeout=5 ipv4.icanhazip.com 2>/dev/null)
 [[ -z "$_ip_val" ]] && _ip_val=$(curl -sfL --max-time 5 ipv4.icanhazip.com 2>/dev/null)
-if [[ -n "$_ip_val" ]]; then
-	echo "$_ip_val" > /etc/IP 2>/dev/null
-fi
-echo ""
-success_msg "Installation key verified."
-sleep 1s
-echo ""
+[[ -n "$_ip_val" ]] && echo "$_ip_val" > /etc/IP 2>/dev/null
+
+msg_ok "Key verified."
 
 # Check if user database already exists
-# If it exists, ask user if they want to keep it or create a new one
 if [[ -f "$HOME/users.db" ]]; then
     blue_code=$(get_color_code "blue")
     reset_code=$(get_reset_code)
     echo ""
     echo -e "${blue_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
-    echo ""
     color_echo "An existing user database (users.db) was found." "yellow"
     color_echo "Keep it and preserve connection limits, or create a new one?" "yellow"
-    echo ""
     menu_option "1" "Keep current database" "red" "yellow"
     menu_option "2" "Create new database" "red" "yellow"
-    echo ""
     echo -e "${blue_code}═══════════════════════════════════════════════════════════════════════${reset_code}"
-    echo ""
     color_echo_n "Choice [1-2]: " "green"
     read -r -e -i 1 optiondb
 else
@@ -298,9 +262,7 @@ if [[ "$optiondb" = '2' ]]; then
     awk -F : '$3 >= 500 { print $1 " 1" }' /etc/passwd | grep -v '^nobody' > "$HOME/users.db"
 fi
 # Start system update process
-print_header " WAITING FOR INSTALLATION"
-echo ""
-echo ""
+banner_info " Installing "
 color_echo "Updating system packages..." "green"
 echo ""
 
@@ -318,12 +280,9 @@ fun_attlist() {
     echo "crz: $(date)" > /usr/share/.plus/.plus
 }
 
-# Run system update with progress bar
 fun_bar 'fun_attlist'
-
 echo ""
 color_echo "Installing dependencies..." "green"
-echo ""
 
 # ------------------------------------------------------------------------------
 # DEPENDENCIES – all tools required by SSH Plus Manager (install + menu + modules)
@@ -388,38 +347,30 @@ inst_pct() {
 
     if [[ ${#_missing[@]} -gt 0 ]]; then
         echo "" >&2
-        warning_msg "Could not install: ${_missing[*]}"
-        warning_msg "Install manually: apt install -y ${_missing[*]}"
+        msg_warn "Could not install: ${_missing[*]}"
+        msg_warn "Install manually: apt install -y ${_missing[*]}"
         echo "" >&2
     fi
 
     if ! command -v speedtest-cli >/dev/null 2>&1; then
-        warning_msg "speedtest-cli is missing. Install later with: pip3 install speedtest-cli"
+        msg_warn "speedtest-cli is missing. Install later with: pip3 install speedtest-cli"
     fi
 }
 
-# Run package installation with progress bar
 fun_bar 'inst_pct'
 
-# Configure firewall rules if UFW (Uncomplicated Firewall) is installed
-# Allow common ports for SSH, HTTP, HTTPS, and proxy services
 if [[ -f "/usr/sbin/ufw" ]]; then
-    ufw allow 443/tcp > /dev/null 2>&1  # HTTPS
-    ufw allow 80/tcp > /dev/null 2>&1   # HTTP
-    ufw allow 3128/tcp > /dev/null 2>&1 # Squid proxy
-    ufw allow 8799/tcp > /dev/null 2>&1 # Custom port
-    ufw allow 8080/tcp > /dev/null 2>&1 # Alternative HTTP port
+    ufw allow 443/tcp > /dev/null 2>&1
+    ufw allow 80/tcp > /dev/null 2>&1
+    ufw allow 3128/tcp > /dev/null 2>&1
+    ufw allow 8799/tcp > /dev/null 2>&1
+    ufw allow 8080/tcp > /dev/null 2>&1
 fi
-
 echo ""
 color_echo "Finalizing installation..." "green"
-echo ""
 
-# Run the main installation script that sets up all modules
-# This script downloads and installs all the manager modules
 fun_bar "$_Ink/list $_lnk $_Ink $_1nk $key"
 
-# Persist installed version for update checks (menu reads /etc/SSHPlus/version or /bin/version)
 [[ -d /etc/SSHPlus ]] || mkdir -p /etc/SSHPlus
 if [[ -s /bin/version ]]; then
 	cp /bin/version /etc/SSHPlus/version 2>/dev/null
@@ -427,21 +378,14 @@ elif [[ -s /etc/SSHPlus/version ]]; then
 	cp /etc/SSHPlus/version /bin/version 2>/dev/null
 fi
 
-echo ""
 cd "$HOME" || exit 1
 
-# Installation complete message
 echo ""
-success_msg "Installation completed successfully."
-echo ""
-
+msg_ok "Installation completed successfully."
 if [[ -f "/bin/menu" ]] && [[ -x "/bin/menu" ]]; then
-    color_echo "  Run the manager with: " "yellow"
-    color_echo "  menu" "green"
-    echo ""
+    color_echo "  Run: menu" "yellow"
 else
-    error_msg "Menu command was not installed correctly."
-    warning_msg "Try running: /bin/menu"
+    msg_err "Menu was not installed correctly. Try: /bin/menu"
 fi
 
 # Clean up: remove installation script and clear bash history

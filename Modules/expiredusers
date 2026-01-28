@@ -35,10 +35,10 @@ color_echo_n "Select option " "green"
 color_echo_n "[1/0/00]: " "white"
 read -r resp
 [[ "$resp" == "0" || "$resp" == "00" ]] && exit 0
-[[ -n "$resp" && "$resp" != "1" ]] && { echo ""; error_msg "Invalid option!"; sleep 2; exit 1; }
+[[ -n "$resp" && "$resp" != "1" ]] && { echo ""; msg_err "Invalid option!"; sleep 2; exit 1; }
 echo ""
-# Use print_header function for colored header
-print_header " User          Date         Status         Action   "
+# Use banner_info function for colored header
+banner_info " User          Date         Status         Action   "
 echo ""
 for user in $(awk -F: '{print $1}' /etc/passwd 2>/dev/null); do
 	expdate=$(chage -l "$user" 2>/dev/null | awk -F: '/Account expires/{print $2}' | xargs)

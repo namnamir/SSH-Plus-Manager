@@ -104,7 +104,7 @@ SSH-Plus-Manager/
 │   └── list             # Bootstrap: download Modules, dirs, hosts, crontab, version
 ├── Modules/
 │   ├── menu             # Main loop; sources colors, shows dashboard, dispatches to scripts
-│   ├── colors           # UI helpers: color_echo, menu_option, print_header, error/success_msg
+│   ├── colors           # UI: msg_ok/msg_err/msg_warn/msg_info, banner_info/banner_danger, color_echo, menu_option, c(), hr, kv
 │   ├── createuser       # [01] Create SSH user + optional OpenVPN
 │   ├── removeuser       # [02] Remove one or all users
 │   ├── sshmonitor       # [03] Live user/connection/traffic monitor
@@ -164,7 +164,7 @@ Contributions are welcome. Follow the conventions below so the project stays con
    - First line: shebang.
    - Second block: short comment `# scriptname – one-line description (menu option [NN] LABEL).`
    - Then: load `colors` from `/etc/SSHPlus/colors`, `/bin/colors`, or `$(dirname "$0")/colors`.
-   - Use `error_msg`, `success_msg`, `warning_msg`, `info_msg` for feedback.
+   - Use `msg_err`, `msg_ok`, `msg_warn`, `msg_info` for feedback.
 
 3. **User lists**
    - Build list with `awk -F: '$3>=1000 {print $1}' /etc/passwd` (and filter e.g. `grep -v nobody`). Use `idx` and display index `i` with `[[ $idx -le 9 ]] && i=0$idx || i=$idx`. Build `_userPass` as `_userPass+="\n${i}:${username}"`. Resolve option to user with:  

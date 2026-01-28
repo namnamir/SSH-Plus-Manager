@@ -20,7 +20,7 @@ else
 	[[ -z "$IP" ]] && IP="N/A"
 fi
 
-print_header "            BANNER SETUP             "
+banner_info "            BANNER SETUP             "
 echo ""
 color_echo "Current IP Address: $IP" "green"
 echo ""
@@ -44,7 +44,7 @@ else
 	service ssh restart 2>/dev/null || service sshd restart 2>/dev/null
 fi
 
-success_msg "Banner updated successfully!"
+msg_ok "Banner updated successfully!"
 echo ""
 color_echo "Banner will be displayed when users connect via SSH" "cyan"
 sleep 3

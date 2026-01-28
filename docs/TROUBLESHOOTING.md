@@ -152,7 +152,7 @@ If any of these is missing or wrong, that port won’t work. See **[SSH-MULTIPOR
 - **speedtest-cli** is tried via apt and then via pip. If both fail, install manually:  
   `pip3 install speedtest-cli`
 
-### Color or “command not found” errors for `get_color_code`, `print_header`, etc.
+### Color or “command not found” errors for `get_color_code`, `banner_info`, etc.
 
 - Those come from the **colors** helper. The menu loads it from `/etc/SSHPlus/colors` or `/bin/colors`.
 - If you run the menu from a copy that wasn’t installed by the installer (e.g. only partial files under `/bin`), colors may be missing.  

@@ -1,109 +1,152 @@
 #!/usr/bin/env bash
-# colors - UI color/styling helpers for SSH Plus Manager
-# Goals:
-# - consistent (printf, not echo -e)
-# - semantic palette (success/warn/danger/info/muted)
-# - safe when not a TTY / NO_COLOR / TERM=dumb
-# - easy string composition: c "red bold", reset, etc.
+# colors.sh — Modern terminal UI styling for SSH Plus Manager
+# Principles:
+# - Semantic roles (ui_*), not random colors everywhere
+# - Small palette (accent + muted + semantic ok/warn/danger)
+# - Works with NO_COLOR / non-tty / TERM=dumb
+# - Helpful UI primitives: hr, section, kv, menu, tables, badges, status dots
+# - Optional: 24-bit color if supported, else fall back to 16-color
+# Extensibility: add a new role by defining UI_FOO, adding ui_foo) in c(), then use c ui_foo or get_color_code ui_foo in scripts.
 
-# ---------- feature detection ----------
+# Strict mode only when run as main script; when sourced by menu/install, don't override caller.
+if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
+	set -o errexit -o nounset -o pipefail
+fi
+
+# -------------------- feature detection --------------------
 _is_tty() { [[ -t 1 ]]; }
+
 _no_color() {
   [[ -n "${NO_COLOR:-}" ]] && return 0
   [[ "${TERM:-}" == "dumb" || -z "${TERM:-}" ]] && return 0
-  !_is_tty && return 0
+  _is_tty || return 0
   return 1
 }
 
-# ---------- core codes ----------
+# Support truecolor if terminal claims it
+_has_truecolor() {
+  [[ "${COLORTERM:-}" =~ (truecolor|24bit) ]] && return 0
+  return 1
+}
+
+# -------------------- base codes --------------------
 ESC=$'\033'
 RESET="${ESC}[0m"
-
 BOLD="${ESC}[1m"
 DIM="${ESC}[2m"
-UNDERLINE="${ESC}[4m"
+UL="${ESC}[4m"
 
-# Foreground (bright/bold-ish default)
-FG_BLACK="${ESC}[30m"
-FG_RED="${ESC}[31m"
-FG_GREEN="${ESC}[32m"
-FG_YELLOW="${ESC}[33m"
-FG_BLUE="${ESC}[34m"
-FG_MAGENTA="${ESC}[35m"
-FG_CYAN="${ESC}[36m"
-FG_WHITE="${ESC}[37m"
+# 16-color fallback (widely supported)
+FG_TEXT_16="${ESC}[97m"     # bright white
+FG_MUTED_16="${ESC}[90m"    # bright black (gray)
+FG_ACCENT_16="${ESC}[96m"   # bright cyan/teal
 
-# Bright foregrounds (better on many dark themes)
-FG_BBLACK="${ESC}[90m"
-FG_BRED="${ESC}[91m"
-FG_BGREEN="${ESC}[92m"
-FG_BYELLOW="${ESC}[93m"
-FG_BBLUE="${ESC}[94m"
-FG_BMAGENTA="${ESC}[95m"
-FG_BCYAN="${ESC}[96m"
-FG_BWHITE="${ESC}[97m"
+FG_OK_16="${ESC}[92m"
+FG_WARN_16="${ESC}[93m"
+FG_DANGER_16="${ESC}[91m"
+FG_INFO_16="${ESC}[96m"
 
-# Background
-BG_RED="${ESC}[41m"
-BG_GREEN="${ESC}[42m"
-BG_YELLOW="${ESC}[43m"
-BG_BLUE="${ESC}[44m"
-BG_MAGENTA="${ESC}[45m"
-BG_CYAN="${ESC}[46m"
-BG_WHITE="${ESC}[47m"
+BG_DANGER_16="${ESC}[41m"
+BG_INFO_16="${ESC}[44m"
 
-# ---------- semantic palette (edit here, not everywhere else) ----------
-# These are the only "meaning" colors your UI should use.
-UI_FRAME="${FG_BBLUE}"           # borders / frame
-UI_TITLE="${BOLD}${FG_BWHITE}"   # app title
-UI_MUTED="${DIM}${FG_BWHITE}"    # secondary text
-UI_LABEL="${FG_BCYAN}"           # labels (Hostname/IP)
-UI_VALUE="${FG_BWHITE}"          # values
-UI_PROMPT="${BOLD}${FG_BGREEN}"  # prompt
+# Truecolor accent (teal) + readable neutrals (used only if supported)
+# Teal: 0, 209, 178  | Muted gray: 140,140,140 | Text: 240,240,240
+_fg_rgb() { printf "%s[38;2;%s;%s;%sm" "$ESC" "$1" "$2" "$3"; }
+_bg_rgb() { printf "%s[48;2;%s;%s;%sm" "$ESC" "$1" "$2" "$3"; }
 
-UI_OK="${BOLD}${FG_BGREEN}"      # success
-UI_WARN="${BOLD}${FG_BYELLOW}"   # warnings / expiring
-UI_DANGER="${BOLD}${FG_BRED}"    # destructive
-UI_INFO="${BOLD}${FG_BCYAN}"     # info
+# Resolve actual palette based on capability
+_init_palette() {
+  if _has_truecolor; then
+    FG_TEXT="$(_fg_rgb 240 240 240)"
+    FG_MUTED="$(_fg_rgb 145 145 145)"
+    FG_ACCENT="$(_fg_rgb 0 209 178)"
+    FG_OK="$(_fg_rgb 80 200 120)"
+    FG_WARN="$(_fg_rgb 255 200 80)"
+    FG_DANGER="$(_fg_rgb 255 95 95)"
+    FG_INFO="$(_fg_rgb 0 209 178)"
+    BG_DANGER="$(_bg_rgb 180 40 40)"
+    BG_INFO="$(_bg_rgb 30 80 160)"
+  else
+    FG_TEXT="$FG_TEXT_16"
+    FG_MUTED="$FG_MUTED_16"
+    FG_ACCENT="$FG_ACCENT_16"
+    FG_OK="$FG_OK_16"
+    FG_WARN="$FG_WARN_16"
+    FG_DANGER="$FG_DANGER_16"
+    FG_INFO="$FG_INFO_16"
+    BG_DANGER="$BG_DANGER_16"
+    BG_INFO="$BG_INFO_16"
+  fi
+}
+_init_palette
 
-# Menu
-UI_BRACKET="${FG_BRED}"          # [01]
-UI_NUM="${FG_BCYAN}"             # 01
-UI_MENU_TXT="${FG_BYELLOW}"      # option label
-UI_SECTION="${BOLD}${FG_BCYAN}"  # section headers
-UI_SECTION_SYS="${BOLD}${FG_BBLUE}"
-UI_SECTION_DANGER="${BOLD}${FG_BRED}"
+# -------------------- semantic roles --------------------
+UI_FRAME="${DIM}${FG_MUTED}"
+UI_TITLE="${BOLD}${FG_ACCENT}"
+UI_SUBTITLE="${FG_MUTED}"
+UI_LABEL="${FG_MUTED}"
+UI_VALUE="${FG_TEXT}"
+UI_PROMPT="${BOLD}${FG_ACCENT}"
 
-# ---------- helpers ----------
-# c "red bold"  => outputs the escape codes for those tokens
+UI_OK="${BOLD}${FG_OK}"
+UI_WARN="${BOLD}${FG_WARN}"
+UI_DANGER="${BOLD}${FG_DANGER}"
+UI_INFO="${BOLD}${FG_INFO}"
+
+UI_MENU_NUM="${BOLD}${FG_ACCENT}"
+UI_MENU_TXT="${FG_TEXT}"
+UI_SECTION="${BOLD}${FG_MUTED}"
+
+# -------------------- token composer --------------------
+# Usage: c ui_title; c bold accent; c reset; etc.
 c() {
   _no_color && { printf ""; return 0; }
 
   local token out=""
-  for token in $*; do
+  for token in "$@"; do
     case "$token" in
       reset) out+="${RESET}" ;;
       bold) out+="${BOLD}" ;;
       dim) out+="${DIM}" ;;
-      ul|underline) out+="${UNDERLINE}" ;;
+      ul|underline) out+="${UL}" ;;
 
-      black) out+="${FG_BLACK}" ;;
-      red) out+="${FG_BRED}" ;;
-      green) out+="${FG_BGREEN}" ;;
-      yellow) out+="${FG_BYELLOW}" ;;
-      blue) out+="${FG_BBLUE}" ;;
-      magenta|purple|rose) out+="${FG_BMAGENTA}" ;;
-      cyan) out+="${FG_BCYAN}" ;;
-      white) out+="${FG_BWHITE}" ;;
-      gray|grey) out+="${FG_BBLACK}" ;;
+      # base tokens (rare direct use)
+      text) out+="${FG_TEXT}" ;;
+      muted) out+="${FG_MUTED}" ;;
+      accent) out+="${FG_ACCENT}" ;;
+      ok) out+="${FG_OK}" ;;
+      warn) out+="${FG_WARN}" ;;
+      danger) out+="${FG_DANGER}" ;;
+      info) out+="${FG_INFO}" ;;
 
-      bg_red) out+="${BG_RED}" ;;
-      bg_green) out+="${BG_GREEN}" ;;
-      bg_yellow) out+="${BG_YELLOW}" ;;
-      bg_blue) out+="${BG_BLUE}" ;;
-      bg_magenta) out+="${BG_MAGENTA}" ;;
-      bg_cyan) out+="${BG_CYAN}" ;;
-      bg_white) out+="${BG_WHITE}" ;;
+      # semantic roles
+      ui_frame) out+="${UI_FRAME}" ;;
+      ui_title) out+="${UI_TITLE}" ;;
+      ui_subtitle) out+="${UI_SUBTITLE}" ;;
+      ui_label) out+="${UI_LABEL}" ;;
+      ui_value) out+="${UI_VALUE}" ;;
+      ui_prompt) out+="${UI_PROMPT}" ;;
+      ui_ok) out+="${UI_OK}" ;;
+      ui_warn) out+="${UI_WARN}" ;;
+      ui_danger) out+="${UI_DANGER}" ;;
+      ui_info) out+="${UI_INFO}" ;;
+      ui_menu_num) out+="${UI_MENU_NUM}" ;;
+      ui_menu_txt) out+="${UI_MENU_TXT}" ;;
+      ui_section) out+="${UI_SECTION}" ;;
+
+      # rare backgrounds (banners only)
+      bg_danger) out+="${BG_DANGER}${FG_TEXT}${BOLD}" ;;
+      bg_info) out+="${BG_INFO}${FG_TEXT}${BOLD}" ;;
+
+      # legacy names (for get_color_code from install/scripts); map to semantic/base
+      red) out+="${FG_DANGER}" ;;
+      green) out+="${FG_OK}" ;;
+      yellow) out+="${FG_WARN}" ;;
+      blue) out+="${FG_ACCENT}" ;;
+      cyan) out+="${FG_ACCENT}" ;;
+      white) out+="${FG_TEXT}" ;;
+      black) out+="${FG_MUTED}" ;;
+      grey|gray) out+="${FG_MUTED}" ;;
     esac
   done
   printf "%s" "$out"
@@ -111,63 +154,187 @@ c() {
 
 reset() { _no_color && printf "" || printf "%s" "$RESET"; }
 
-# Safe printf wrappers
-color_echo() {
-  local text="$1" color="${2:-white}"
-  printf "%b%s%b\n" "$(c "$color")" "$text" "$(reset)"
-}
-color_echo_n() {
-  local text="$1" color="${2:-white}"
-  printf "%b%s%b" "$(c "$color")" "$text" "$(reset)"
+# -------------------- terminal sizing --------------------
+term_cols() { tput cols 2>/dev/null || printf "80"; }
+
+repeat_char() {
+  local ch="$1" n="$2"
+  printf "%*s" "$n" "" | tr ' ' "$ch"
 }
 
-# Keep your old API but improve output format
+# -------------------- primitives --------------------
+hr() {
+  local ch="${1:-─}" cols
+  cols="$(term_cols)"
+  if _no_color; then
+    repeat_char "-" "$cols"; printf "\n"; return 0
+  fi
+  printf "%b%s%b\n" "$(c ui_frame)" "$(repeat_char "$ch" "$cols")" "$(reset)"
+}
+
+section() {
+  printf "\n%b%s%b\n" "$(c ui_section)" "$1" "$(reset)"
+}
+
+title_line() {
+  # Big title + rule
+  printf "%b%s%b\n" "$(c ui_title)" "$1" "$(reset)"
+  hr
+}
+
+kv() {
+  # key/value line
+  local k="$1" v="$2"
+  printf "%b%-10s%b %b%s%b\n" "$(c ui_label)" "${k}:" "$(reset)" "$(c ui_value)" "$v" "$(reset)"
+}
+
+# -------------------- messages --------------------
+msg_ok()   { printf "%b✔ %s%b\n" "$(c ui_ok)" "$1" "$(reset)"; }
+msg_warn() { printf "%b⚠ %s%b\n" "$(c ui_warn)" "$1" "$(reset)"; }
+msg_err()  { printf "%b✖ %s%b\n" "$(c ui_danger)" "$1" "$(reset)"; }
+msg_info() { printf "%bℹ %s%b\n" "$(c ui_info)" "$1" "$(reset)"; }
+
+banner_info()   { printf "%b %s %b\n" "$(c bg_info)" "$1" "$(reset)"; }
+banner_danger() { printf "%b %s %b\n" "$(c bg_danger)" "$1" "$(reset)"; }
+
+# -------------------- badges / status --------------------
+# status_dot <active|idle|inactive|unknown>
+status_dot() {
+  local s="${1:-unknown}"
+  case "$s" in
+    active)   printf "%b●%b" "$(c ok)" "$(reset)" ;;
+    idle)     printf "%b●%b" "$(c warn)" "$(reset)" ;;
+    inactive) printf "%b●%b" "$(c danger)" "$(reset)" ;;
+    *)        printf "%b●%b" "$(c muted)" "$(reset)" ;;
+  esac
+}
+
+# badge <text> <ui_ok|ui_warn|ui_danger|ui_info|ui_frame>
+badge() {
+  local text="$1" style="${2:-ui_frame}"
+  printf "%b[%s]%b" "$(c "$style")" "$text" "$(reset)"
+}
+
+# -------------------- menus --------------------
 menu_option() {
-  local number="$1" text="$2"
-  local bcol="${3:-red}" tcol="${4:-yellow}"
-  printf "%b[%b%s%b]%b %s%b\n" \
-    "$(c "$bcol")" "$(c cyan)" "$number" "$(c "$bcol")" \
-    "$(c "$tcol")" "$text" "$(reset)"
+  # menu_option 1 "Create user"
+  local n="$1" text="$2"
+  printf "%b[%02d]%b %b%s%b\n" "$(c ui_menu_num)" "$n" "$(reset)" "$(c ui_menu_txt)" "$text" "$(reset)"
 }
 
-error_msg()   { printf "%b✖ %s%b\n" "$(c red bold)" "$1" "$(reset)"; }
-success_msg() { printf "%b✔ %s%b\n" "$(c green bold)" "$1" "$(reset)"; }
-warning_msg() { printf "%b⚠  %s%b\n" "$(c yellow bold)" "$1" "$(reset)"; }
-info_msg()    { printf "%bℹ %s%b\n" "$(c cyan bold)" "$1" "$(reset)"; }
-
-# For building strings: printf "%bfoo%b" "$(get_color_code red)" "$(get_reset_code)"
-get_color_code() { c "$1"; }
-get_reset_code() { reset; }
-
-# Better headers (no mixed tput + raw sequences)
-print_header() {
-  local text="$1"
-  _no_color && { printf "%s\n" "$text"; return 0; }
-  printf "%b%s%b\n" "$(c bg_blue bold white)" "$text" "$(reset)"
-}
-print_header_red() {
-  local text="$1"
-  _no_color && { printf "%s\n" "$text"; return 0; }
-  printf "%b%s%b\n" "$(c bg_red bold white)" "$text" "$(reset)"
+menu_option_tag() {
+  # menu_option_tag 19 "Remove script" "DANGER" ui_danger
+  local n="$1" text="$2" tag="${3:-}" tag_style="${4:-ui_info}"
+  if [[ -n "$tag" ]]; then
+    printf "%b[%02d]%b %b%-24s%b %b%s%b\n" \
+      "$(c ui_menu_num)" "$n" "$(reset)" \
+      "$(c ui_menu_txt)" "$text" "$(reset)" \
+      "$(c "$tag_style")" "$tag" "$(reset)"
+  else
+    menu_option "$n" "$text"
+  fi
 }
 
-# Used by fun_bar / progress bars (returns yellow|red|white|green|reset)
-get_progress_colors() {
-  printf "%s|%s|%s|%s|%s" "$(c yellow)" "$(c red)" "$(c white)" "$(c green)" "$(reset)"
+prompt() {
+  # prompt "Select option: "
+  printf "%b%s%b" "$(c ui_prompt)" "$1" "$(reset)"
 }
 
+# -------------------- tables --------------------
+# table_header "COL1" 12 "COL2" 8 ...
+table_header() {
+  local cols=("$@") i label width line=""
+  for ((i=0; i<${#cols[@]}; i+=2)); do
+    label="${cols[i]}"; width="${cols[i+1]}"
+    line+=$(printf "%-${width}s " "$label")
+  done
+  printf "%b%s%b\n" "$(c ui_frame)" "$line" "$(reset)"
+  hr
+}
+
+# table_row "text_style" "VAL1" 12 "VAL2" 8 ...
+# text_style can be: ui_value, ui_frame, etc.
+table_row() {
+  local style="$1"; shift
+  local cols=("$@") i val width line=""
+  for ((i=0; i<${#cols[@]}; i+=2)); do
+    val="${cols[i]}"; width="${cols[i+1]}"
+    line+=$(printf "%-${width}s " "$val")
+  done
+  printf "%b%s%b\n" "$(c "$style")" "$line" "$(reset)"
+}
+
+# -------------------- formatting utilities --------------------
+fmt_traffic() {
+  # fmt_traffic "0B/0B" -> muted, else accent
+  local t="$1"
+  if [[ "$t" == "0B/0B" || "$t" == "↓0B/↑0B" || "$t" == "0B / 0B" ]]; then
+    printf "%b%s%b" "$(c muted)" "$t" "$(reset)"
+  else
+    printf "%b%s%b" "$(c accent)" "$t" "$(reset)"
+  fi
+}
+
+fmt_last_seen() {
+  # fmt_last_seen "never" -> muted, else value
+  local t="$1"
+  if [[ "$t" == "never" || -z "$t" ]]; then
+    printf "%b%s%b" "$(c muted)" "never" "$(reset)"
+  else
+    printf "%b%s%b" "$(c ui_value)" "$t" "$(reset)"
+  fi
+}
+
+# -------------------- confirmation UX (advanced) --------------------
+confirm() {
+  # confirm "Remove script?" -> returns 0 yes, 1 no
+  local q="$1" ans
+  prompt "$q [y/N]: "
+  read -r ans
+  [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]]
+}
+
+# -------------------- spinner (advanced, non-blocking feel) --------------------
+spinner() {
+  # spinner <pid> <message>
+  local pid="$1" msg="${2:-Working...}"
+  local frames='|/-\' i=0
+  _no_color && { wait "$pid"; return $?; }
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "\r%b%s%b %c" "$(c ui_info)" "$msg" "$(reset)" "${frames:i%4:1}"
+    sleep 0.1
+    ((i++))
+  done
+  printf "\r%*s\r" "$(term_cols)" ""
+  wait "$pid"
+}
+
+# -------------------- legacy compatibility (scripts expect these) --------------------
 # Color selection menu (used by connections banner/theme)
 show_color_menu() {
   printf "\n"
-  menu_option "01" "BLUE" "red" "yellow"
-  menu_option "02" "GREEN" "red" "yellow"
-  menu_option "03" "RED" "red" "yellow"
-  menu_option "04" "YELLOW" "red" "yellow"
-  menu_option "05" "ROSE" "red" "yellow"
-  menu_option "06" "CYAN" "red" "yellow"
-  menu_option "07" "ORANGE" "red" "yellow"
-  menu_option "08" "PURPLE" "red" "yellow"
-  menu_option "09" "BLACK" "red" "yellow"
-  menu_option "10" "WITHOUT COLOR" "red" "yellow"
+  menu_option 1 "BLUE"
+  menu_option 2 "GREEN"
+  menu_option 3 "RED"
+  menu_option 4 "YELLOW"
+  menu_option 5 "ROSE"
+  menu_option 6 "CYAN"
+  menu_option 7 "ORANGE"
+  menu_option 8 "PURPLE"
+  menu_option 9 "BLACK"
+  menu_option 10 "WITHOUT COLOR"
   printf "\n"
 }
+
+# Progress bar color pipe (yellow|red|white|green|reset) for fun_bar-style scripts
+get_progress_colors() {
+  printf "%s|%s|%s|%s|%s" "$(c warn)" "$(c danger)" "$(c text)" "$(c ok)" "$(reset)"
+}
+
+# Exported helpers for convenience
+get_color_code() { c "$1"; }
+get_reset_code() { reset; }
+
+# Ad-hoc colored text (script-friendly; prefer msg_* / prompt() for messages/prompts)
+color_echo()  { printf "%b%s%b\n" "$(c "${2:-white}")" "$1" "$(reset)"; }
+color_echo_n(){ printf "%b%s%b" "$(c "${2:-white}")" "$1" "$(reset)"; }

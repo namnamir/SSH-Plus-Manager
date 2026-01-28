@@ -9,6 +9,12 @@ elif [[ -f /bin/colors ]]; then
 elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
+if [[ -z "${SSHPLUS_FROM_REPO:-}" ]]; then
+	_mod_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+	_repo_root="$(cd "${_mod_dir}/.." 2>/dev/null && pwd)"
+	[[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]] && export SSHPLUS_FROM_REPO=1
+	unset -v _mod_dir _repo_root
+fi
 
 remove_ovp() {
 	local user="$1"
@@ -23,10 +29,10 @@ remove_ovp() {
 	[[ -e "$HOME/${user}.ovpn" ]] && rm -f "$HOME/${user}.ovpn" 2>/dev/null
 	[[ -e /var/www/html/openvpn/"${user}.zip" ]] && rm -f /var/www/html/openvpn/"${user}.zip" 2>/dev/null
 }
-[[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/ > /dev/null 2>&1
+[[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/ > /dev/null 2>&1
 database="/root/users.db"
 clear
-print_header "   Remove SSH User   "
+banner_info "   Remove SSH User   "
 echo ""
 menu_option "1" "REMOVE A USER" "red" "yellow"
 menu_option "2" "REMOVE ALL USERS" "red" "yellow"
@@ -40,7 +46,7 @@ resp="${resp//[[:space:]]/}"
 [[ "$resp" == "00" ]] && exit 99
 if [[ "$resp" == "1" ]]; then
 	clear
-	print_header "   Remove SSH User   "
+	banner_info "   Remove SSH User   "
 	echo ""
 	color_echo "LIST OF USERS:" "yellow"
 	echo ""
@@ -84,12 +90,12 @@ fi
 user=$(echo -e "${_userPass}" | awk -v o="$option" -F: 'NF>=2 && $1+0==o+0 {print $2; exit}')
 if [[ -z "$option" ]]; then
 	echo ""
-	error_msg "  Empty or invalid user!   "
+	msg_err "  Empty or invalid user!   "
 	echo ""
 	exit 1
 elif [[ -z "$user" ]]; then
 	echo ""
-	error_msg " Empty or invalid user! "
+	msg_err " Empty or invalid user! "
 	echo ""
 	exit 1
 else
@@ -99,10 +105,10 @@ else
 		sleep 1
 		userdel -f "$user" 2>/dev/null || deluser --force "$user" 2>/dev/null
 		if getent passwd "$user" >/dev/null 2>&1; then
-			error_msg " Failed to remove user $user. Run as root. "
+			msg_err " Failed to remove user $user. Run as root. "
 			exit 1
 		fi
-		success_msg " User $user removed successfully! "
+		msg_ok " User $user removed successfully! "
 		grep -v "^${user}[[:space:]]" "$database" > /tmp/ph && mv /tmp/ph "$database"
 		rm -f /etc/SSHPlus/senha/"$user" 2>/dev/null
 		if [[ -e /etc/openvpn/server.conf ]]; then
@@ -114,11 +120,11 @@ else
 		if [[ "$(grep -c "$user" /tmp/rem 2>/dev/null)" -eq 0 ]]; then
 			userdel -f "$user" 2>/dev/null || deluser --force "$user" 2>/dev/null
 			if getent passwd "$user" >/dev/null 2>&1; then
-				error_msg " Failed to remove user $user. Run as root. "
+				msg_err " Failed to remove user $user. Run as root. "
 				exit 1
 			fi
 			echo ""
-			success_msg " User $user removed successfully! "
+			msg_ok " User $user removed successfully! "
 			grep -v "^${user}[[:space:]]" "$database" > /tmp/ph && mv /tmp/ph "$database"
 			rm -f /etc/SSHPlus/senha/"$user" 2>/dev/null
 			if [[ -e /etc/openvpn/server.conf ]]; then
@@ -127,15 +133,15 @@ else
 			exit 0
 		else
 			echo ""
-			info_msg "User logged in. Disconnecting..."
+			msg_info "User logged in. Disconnecting..."
 			pkill -f "$user" > /dev/null 2>&1
 			sleep 1
 			userdel -f "$user" 2>/dev/null || deluser --force "$user" 2>/dev/null
 			if getent passwd "$user" >/dev/null 2>&1; then
-				error_msg " Failed to remove user $user. Run as root. "
+				msg_err " Failed to remove user $user. Run as root. "
 				exit 1
 			fi
-			success_msg " User $user successfully removed! "
+			msg_ok " User $user successfully removed! "
 			grep -v "^${user}[[:space:]]" "$database" > /tmp/ph && mv /tmp/ph "$database"
 			rm -f /etc/SSHPlus/senha/"$user" 2>/dev/null
 			if [[ -e /etc/openvpn/server.conf ]]; then
@@ -145,13 +151,13 @@ else
 		fi
 	else
 		echo ""
-		error_msg "The user $user does not exist!"
+		msg_err "The user $user does not exist!"
 		echo ""
 	fi
 fi
 elif [[ "$resp" == "2" ]]; then
 	clear
-	print_header "   Remove SSH User   "
+	banner_info "   Remove SSH User   "
 	echo ""
 	color_echo_n "DO YOU REALLY WANT TO REMOVE ALL USERS? " "yellow"
 	color_echo_n "[y/n]: " "white"
@@ -170,18 +176,18 @@ elif [[ "$resp" == "2" ]]; then
 		: > /root/users.db
 		rm -f "$HOME"/*.zip >/dev/null 2>&1
 		echo ""
-		success_msg "SUCCESSFULLY REMOVED USERS!"
+		msg_ok "SUCCESSFULLY REMOVED USERS!"
 		sleep 2
 		exit 0
 	else
 		echo ""
-		error_msg "Returning to the menu..."
+		msg_err "Returning to the menu..."
 		sleep 2
 		exit 0
 	fi
 else
 	echo ""
-	error_msg "Invalid option!"
+	msg_err "Invalid option!"
 	sleep 1.5
 	exit 0
 fi

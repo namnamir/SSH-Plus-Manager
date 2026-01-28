@@ -10,9 +10,9 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "            REBOOT SYSTEM              "
+banner_info "            REBOOT SYSTEM              "
 echo ""
-warning_msg "This will reboot the system!"
+msg_warn "This will reboot the system!"
 color_echo_n "Are you sure? [y/N]: " "yellow"
 read -r confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then

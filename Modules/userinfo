@@ -20,9 +20,9 @@ color_echo_n "Select option " "green"
 color_echo_n "[1/0/00]: " "white"
 read -r resp
 [[ "$resp" == "0" || "$resp" == "00" ]] && exit 0
-[[ -n "$resp" && "$resp" != "1" ]] && { echo ""; error_msg "Invalid option!"; sleep 2; exit 1; }
+[[ -n "$resp" && "$resp" != "1" ]] && { echo ""; msg_err "Invalid option!"; sleep 2; exit 1; }
 clear
-print_header " User                 Password               Limit         Validity "
+banner_info " User                 Password               Limit         Validity "
 echo ""
 yellow_code=$(get_color_code "yellow")
 white_code=$(get_color_code "white")

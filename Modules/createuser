@@ -9,6 +9,12 @@ elif [[ -f /bin/colors ]]; then
 elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
+if [[ -z "${SSHPLUS_FROM_REPO:-}" ]]; then
+	_mod_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+	_repo_root="$(cd "${_mod_dir}/.." 2>/dev/null && pwd)"
+	[[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]] && export SSHPLUS_FROM_REPO=1
+	unset -v _mod_dir _repo_root
+fi
 
 # IP: use /etc/IP if set, else detect and persist
 if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
@@ -20,7 +26,7 @@ else
 	[[ -n "$IP" ]] && echo "$IP" > /etc/IP 2>/dev/null
 	[[ -z "$IP" ]] && IP=""
 fi
-# Legacy ANSI vars (prefer error_msg/print_header); remove if unused
+# Legacy ANSI vars (prefer msg_err/banner_info from colors); remove if unused
 cor1='\033[41;1;37m'
 cor2='\033[44;1;37m'
 scor='\033[0m'
@@ -127,8 +133,8 @@ fun_bar() {
 }
 fun_edithost() {
     clear
-    # Use print_header function for colored header
-    print_header "          CHANGE OVPN HOST            "
+    # Use banner_info function for colored header
+    banner_info "          CHANGE OVPN HOST            "
     echo ""
     # Use color functions for host display
     color_echo_n "HOST IN USE" "yellow"
@@ -152,7 +158,7 @@ fun_edithost() {
     read respo
     [[ -z "$respo" ]] && {
         echo ""
-        error_msg "Invalid option!"
+        msg_err "Invalid option!"
         sleep 2
         fun_edithost
     }
@@ -167,7 +173,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althost'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '2' ]]; then
@@ -181,7 +187,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althost2'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '3' ]]; then
@@ -195,7 +201,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althostpay1'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '4' ]]; then
@@ -209,7 +215,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althostpay2'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '5' ]]; then
@@ -223,7 +229,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althost5'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '6' ]]; then
@@ -237,7 +243,7 @@ fun_edithost() {
         }
         fun_bar 'fun_althost6'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '7' ]]; then
@@ -276,13 +282,13 @@ fun_edithost() {
         }
         fun_bar 'fun_packhost'
         echo ""
-        success_msg "HOST CHANGED SUCCESSFULLY!"
+        msg_ok "HOST CHANGED SUCCESSFULLY!"
         sleep 1.5
     elif [[ "$respo" = '8' ]]; then
         echo ""
         color_echo "CHANGING OVPN FILE!" "green"
         echo ""
-        error_msg "ATTENTION!"
+        msg_err "ATTENTION!"
         echo ""
         color_echo_n "TO SAVE USE THE KEYS " "yellow"
         color_echo "ctrl x y" "green"
@@ -290,21 +296,21 @@ fun_edithost() {
         clear
         nano /etc/openvpn/client-common.txt
         echo ""
-        success_msg "CHANGED SUCCESSFULLY!"
+        msg_ok "CHANGED SUCCESSFULLY!"
         fun_geraovpn
         sleep 1.5
     elif [[ "$respo" = '0' ]]; then
         echo ""
-        error_msg "Returning..."
+        msg_err "Returning..."
         sleep 2
     else
         echo ""
-        error_msg "Invalid option !"
+        msg_err "Invalid option !"
         sleep 2
         fun_edithost
     fi
 }
-[[ ! -e /usr/lib/sshplus ]] && exit 0
+[[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && exit 0
 clear
 tput setaf 7;tput setab 4;tput bold;printf '%30s%s%-15s\n' "Create SSH User";tput sgr0
 echo ""
@@ -315,36 +321,36 @@ username="${username//[[:space:]]/}"
 [[ "$username" == "00" ]] && exit 99
 [[ -z "$username" ]] && {
 	echo ""
-	error_msg "Empty or invalid username!"
+	msg_err "Empty or invalid username!"
 	echo ""
 	exit 1
 }
 [[ "$(grep -wc $username /etc/passwd)" != '0' ]] && {
 	echo ""
-	error_msg "This user already exists. try another name!"
+	msg_err "This user already exists. try another name!"
 	echo ""
 	exit 1
 }
 [[ ${username} != ?(+|-)+([a-zA-Z0-9]) ]] && {
 	echo ""
-	error_msg "You entered an invalid username!"
-	error_msg "Do not use spaces, accents or special characters!"
+	msg_err "You entered an invalid username!"
+	msg_err "Do not use spaces, accents or special characters!"
 	echo ""
 	exit 1
 }
 sizemin=$(echo ${#username})
 [[ $sizemin -lt 2 ]] && {
 	echo ""
-	error_msg "You entered a very short username"
-	error_msg "use at least two characters!"
+	msg_err "You entered a very short username"
+	msg_err "use at least two characters!"
 	echo ""
 	exit 1
 }
 sizemax=$(echo ${#username})
 [[ $sizemax -gt 10 ]] && {
 	echo ""
-	error_msg "You entered a very long username"
-	error_msg "use a maximum of 10 characters!"
+	msg_err "You entered a very long username"
+	msg_err "use a maximum of 10 characters!"
 	echo ""
 	exit 1
 }
@@ -352,14 +358,14 @@ color_echo_n "Password: " "green"
 read -r password
 [[ -z $password ]] && {
 	echo ""
-	error_msg "Password empty or invalid!"
+	msg_err "Password empty or invalid!"
 	echo ""
 	exit 1
 }
 sizepass=$(echo ${#password})
 [[ $sizepass -lt 4 ]] && {
 	echo ""
-	error_msg "Short password !, use at least 4 characters"
+	msg_err "Short password !, use at least 4 characters"
 	echo ""
 	exit 1
 }
@@ -367,19 +373,19 @@ color_echo_n "Days to expire: " "green"
 read -r dias
 [[ -z $dias ]] && {
 	echo ""
-	error_msg "No number of days!"
+	msg_err "No number of days!"
 	echo ""
 	exit 1
 }
 [[ ${dias} != ?(+|-)+([0-9]) ]] && {
 	echo ""
-	error_msg "You entered an invalid number of days!"
+	msg_err "You entered an invalid number of days!"
 	echo ""
 	exit 1
 }
 [[ $dias -lt 1 ]] && {
 	echo ""
-	error_msg "The number must be greater than zero!"
+	msg_err "The number must be greater than zero!"
 	echo ""
 	exit 1
 }
@@ -387,19 +393,19 @@ color_echo_n "Connection limit: " "green"
 read -r sshlimiter
 [[ -z $sshlimiter ]] && {
 	echo ""
-	error_msg "You left the connection limit empty!"
+	msg_err "You left the connection limit empty!"
 	echo ""
 	exit 1
 }
 [[ ${sshlimiter} != ?(+|-)+([0-9]) ]] && {
 	echo ""
-	error_msg "You entered an invalid number of connection!"
+	msg_err "You entered an invalid number of connection!"
 	echo ""
 	exit 1
 }
 [[ $sshlimiter -lt 1 ]] && {
 	echo ""
-	error_msg "Number of simultaneous connections must be greater than zero!"
+	msg_err "Number of simultaneous connections must be greater than zero!"
 	echo ""
 	exit 1
 }
@@ -442,7 +448,7 @@ echo "$username $sshlimiter" >>/root/users.db
 			}
 		}
 		clear
-		print_header "       SSH ACCOUNT CREATED !      "
+		banner_info "       SSH ACCOUNT CREATED !      "
 		# Use color functions for account info display
 		echo ""
 		# Ensure IP is set
@@ -506,7 +512,7 @@ echo "$username $sshlimiter" >>/root/users.db
 		}
 	} || {
 		clear
-		print_header "       SSH ACCOUNT CREATED !      "
+		banner_info "       SSH ACCOUNT CREATED !      "
 		# Use color functions for account info display
 		echo ""
 		# Ensure IP is set
@@ -533,7 +539,7 @@ echo "$username $sshlimiter" >>/root/users.db
 	}
 } || {
 	clear
-	print_header "       SSH ACCOUNT CREATED !      "
+	banner_info "       SSH ACCOUNT CREATED !      "
 	# Use color functions for account info display
 	echo ""
 	# Ensure IP is set (same fallback as other branches)

@@ -10,11 +10,11 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "   Change limit of simultaneous connections   "
+banner_info "   Change limit of simultaneous connections   "
 database="/root/users.db"
 if [[ ! -f "$database" ]]; then
 	echo ""
-	error_msg "$database file not found"
+	msg_err "$database file not found"
 	echo ""
 	exit 1
 else
@@ -80,13 +80,13 @@ else
     if [[ -z $option ]]; then
 		# Use error message function - handles fallback internally
 		echo ""
-		error_msg "Empty or non-existent user"
+		msg_err "Empty or non-existent user"
 		echo ""
 		exit
 	elif [[ -z $usuario ]]; then
 		# Use error message function - handles fallback internally
 		echo ""
-		error_msg "Empty or non-existent user"
+		msg_err "Empty or non-existent user"
 		echo ""
 		exit 1
 	else
@@ -101,7 +101,7 @@ else
 			then
 				# Use error message function - handles fallback internally
 				echo ""
-				error_msg "You entered an invalid number!"
+				msg_err "You entered an invalid number!"
 				echo ""
 				exit 1
 			else
@@ -109,7 +109,7 @@ else
 				then
 					# Use error message function - handles fallback internally
 					echo ""
-					error_msg "You entered an invalid number!"
+					msg_err "You entered an invalid number!"
 					echo ""
 					exit 1
 				else
@@ -117,7 +117,7 @@ else
 					then
 						# Use error message function - handles fallback internally
 						echo ""
-						error_msg "You must enter a number greater than zero!"
+						msg_err "You must enter a number greater than zero!"
 						echo ""
 						exit 1
 					else
@@ -127,7 +127,7 @@ else
 						echo $usuario $sshnum >> /root/users.db
 						# Use success message function - handles fallback internally
 						echo ""
-						success_msg "Limit applied to user $usuario was $sshnum"
+						msg_ok "Limit applied to user $usuario was $sshnum"
 						sleep 2
 						exit
 					fi
@@ -136,7 +136,7 @@ else
 		else
 			# Use error message function - handles fallback internally
 			echo ""
-			error_msg "User $usuario not found"
+			msg_err "User $usuario not found"
 			echo ""
 			exit 1
 		fi

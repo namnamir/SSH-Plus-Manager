@@ -11,7 +11,7 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 fi
 
 if ! command -v nload &>/dev/null; then
-	error_msg "nload is not installed. Install with: apt install nload"
+	msg_err "nload is not installed. Install with: apt install nload"
 	sleep 3
 	exit 1
 fi

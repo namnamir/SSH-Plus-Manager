@@ -73,16 +73,16 @@ lnk="N/A"
 [[ -f $HOME/speed_lnk ]] && [[ -s $HOME/speed_lnk ]] && lnk=$(cat $HOME/speed_lnk)
 
 if [[ "$lnk" == "SPEEDTEST_CLI_MISSING" ]]; then
-	error_msg "speedtest-cli is required but not installed."
+	msg_err "speedtest-cli is required but not installed."
 	if [[ "$(id -u)" -eq 0 ]]; then
 		color_echo "Attempting to install speedtest-cli..." "yellow"
 		echo ""
 		if python3 -m pip install speedtest-cli 2>&1 || pip3 install speedtest-cli 2>&1; then
-			success_msg "speedtest-cli installed. Run [09] SPEEDTEST again."
+			msg_ok "speedtest-cli installed. Run [09] SPEEDTEST again."
 		elif apt-get update -qq 2>/dev/null && apt-get install -y speedtest-cli 2>&1; then
-			success_msg "speedtest-cli installed (apt). Run [09] SPEEDTEST again."
+			msg_ok "speedtest-cli installed (apt). Run [09] SPEEDTEST again."
 		else
-			error_msg "Auto-install failed. Errors shown above."
+			msg_err "Auto-install failed. Errors shown above."
 			color_echo "Install manually:  pip3 install speedtest-cli   or   apt install speedtest-cli" "cyan"
 		fi
 	else
@@ -96,7 +96,7 @@ if [[ "$lnk" == "SPEEDTEST_CLI_MISSING" ]]; then
 fi
 
 if [[ "$lnk" == "SPEEDTEST_CLI_FAIL" ]]; then
-	error_msg "speedtest-cli ran but produced no output (network or config issue)."
+	msg_err "speedtest-cli ran but produced no output (network or config issue)."
 	[[ -f $HOME/speed_err ]] && [[ -s $HOME/speed_err ]] && { color_echo "Error output:" "yellow"; sed 's/^/  /' "$HOME/speed_err" | head -20; echo ""; }
 	color_echo "Check connectivity to speedtest.net and try again." "cyan"
 	echo ""

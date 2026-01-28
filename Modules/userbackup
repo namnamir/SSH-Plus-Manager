@@ -10,7 +10,7 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "            USER BACKUP                 "
+banner_info "            USER BACKUP                 "
 echo ""
 backup_dir="${HOME:-/root}"
 stamp=$(date +%Y%m%d_%H%M%S)
@@ -39,10 +39,10 @@ pass_dir="/etc/SSHPlus/senha"
 } >"$out" 2>/dev/null
 
 if [[ -f "$out" ]] && [[ -s "$out" ]]; then
-	success_msg "Backup saved to: $out"
+	msg_ok "Backup saved to: $out"
 	color_echo "File: $out" "cyan"
 else
-	error_msg "Backup file could not be created."
+	msg_err "Backup file could not be created."
 fi
 echo ""
 sleep 2

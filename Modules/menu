@@ -10,6 +10,14 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
+# Detect run-from-repo (no install): so we don't require /usr/lib/sshplus or remove /bin/menu
+_mod_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+_repo_root="$(cd "${_mod_dir}/.." 2>/dev/null && pwd)"
+if [[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]]; then
+	export SSHPLUS_FROM_REPO=1
+fi
+unset -v _mod_dir _repo_root
+
 # Progress bar function - shows visual progress for long operations
 fun_bar() {
 	local command1="$1"
@@ -17,18 +25,18 @@ fun_bar() {
 
 	(
 		[[ -e $HOME/fim ]] && rm $HOME/fim
-		[[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/menu >/dev/null 2>&1
+		[[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && rm -rf /bin/menu >/dev/null 2>&1
 		${command1} -y >/dev/null 2>&1
 		${command2} -y >/dev/null 2>&1
 		touch $HOME/fim
 	) >/dev/null 2>&1 &
 
 	tput civis
-	# Use color functions for progress bar
-	yellow_code=$(get_color_code "yellow")
-	red_code=$(get_color_code "red")
-	white_code=$(get_color_code "white")
-	green_code=$(get_color_code "green")
+	# Use semantic color tokens (new colors API)
+	yellow_code=$(get_color_code "warn")
+	red_code=$(get_color_code "danger")
+	white_code=$(get_color_code "text")
+	green_code=$(get_color_code "ok")
 	reset_code=$(get_reset_code)
 
 	echo -ne "${yellow_code}["
@@ -73,9 +81,6 @@ ensure_fetch_deps() {
 menu() {
 	# Main menu loop - runs until user exits
 	while true; do
-		green_code=$(get_color_code "green")
-		red_code=$(get_color_code "red")
-
 		# Detect operating system version
 		if [[ "$(grep -c "Ubuntu" /etc/issue.net 2>/dev/null)" = "1" ]]; then
 			system=$(cut -d' ' -f1 /etc/issue.net 2>/dev/null)
@@ -244,17 +249,17 @@ menu() {
 		_disk_pct=$(echo "${_disk_percent}" | sed 's/%//' | awk '{printf "%.0f", $1+0}')
 		_ram_pct=${_ram_pct:-0}; _cpu_pct=${_cpu_pct:-0}; _disk_pct=${_disk_pct:-0}
 		_pct_color() {
-			local n="${1:-0}"; [[ "$n" -lt 60 ]] 2>/dev/null && { get_color_code green; return; }; [[ "$n" -lt 85 ]] 2>/dev/null && { get_color_code yellow; return; }; get_color_code red;
+			local n="${1:-0}"; [[ "$n" -lt 60 ]] 2>/dev/null && { get_color_code ok; return; }; [[ "$n" -lt 85 ]] 2>/dev/null && { get_color_code warn; return; }; get_color_code danger;
 		}
 
 		clear
 
-		blue_code=$(get_color_code "blue")
-		green_code=$(get_color_code "green")
-		red_code=$(get_color_code "red")
-		white_code=$(get_color_code "white")
-		yellow_code=$(get_color_code "yellow")
-		cyan_code=$(get_color_code "cyan")
+		blue_code=$(get_color_code "accent")
+		green_code=$(get_color_code "ok")
+		red_code=$(get_color_code "danger")
+		white_code=$(get_color_code "text")
+		yellow_code=$(get_color_code "warn")
+		cyan_code=$(get_color_code "accent")
 		reset_code=$(get_reset_code)
 		_line="${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 		# Row 1: RAM / CPU / Disk with percent colors (<60 green, 60–84 yellow, >=85 red)
@@ -297,10 +302,10 @@ menu() {
 		echo ""
 		echo -e "${blue_code}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${reset_code}"
 		echo ""
-		color_echo_n "PLEASE SELECT FROM OPTIONS " "green"
-		color_echo_n "?" "yellow"
-		color_echo_n "?" "red"
-		color_echo_n " : " "white"
+		printf "%b%s%b" "$(c ui_prompt)" "PLEASE SELECT FROM OPTIONS " "$(reset)"
+		printf "%b%s%b" "$(c ui_warn)" "?" "$(reset)"
+		printf "%b%s%b" "$(c ui_danger)" "?" "$(reset)"
+		printf "%b%s%b" "$(c ui_value)" " : " "$(reset)"
 		read -r x
 
 		case "$x" in
@@ -308,7 +313,7 @@ menu() {
 			clear
 			createuser
 			echo ""
-			color_echo_n "Press ENTER to return to menu (copy the user info above first)..." "yellow"
+			printf "%b%s%b" "$(c ui_warn)" "Press ENTER to return to menu (copy the user info above first)..." "$(reset)"
 			read -r
 			;;
 		2 | 02)
@@ -398,14 +403,14 @@ menu() {
 			;;
 		0 | 00)
 			# Exit completely
-			color_echo "Exiting..." "red"
+			printf "%b%s%b\n" "$(c ui_danger)" "Exiting..." "$(reset)"
 			sleep 2
 			clear
 			exit 0
 			;;
 		*)
 			echo ""
-			error_msg "Invalid option !"
+			msg_err "Invalid option !"
 			sleep 2
 			;;
 		esac

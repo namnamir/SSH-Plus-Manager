@@ -68,7 +68,7 @@ fi
 
 	inst_sqd() {
 		if netstat -nltp | grep 'squid' 1>/dev/null 2>/dev/null; then
-			print_header_red "            REMOVE SQUID PROXY              "
+			banner_info_red "            REMOVE SQUID PROXY              "
 			echo ""
 			color_echo_n "DO YOU REALLY WANT TO REMOVE SQUID " "green"
 			color_echo_n "? " "red"
@@ -92,27 +92,27 @@ fi
 				}
 				fun_bar 'rem_sqd'
 				echo ""
-				success_msg "SQUID REMOVED SUCCESSFULLY !"
+				msg_ok "SQUID REMOVED SUCCESSFULLY !"
 				sleep 2
 				clear
 				fun_connections
 			} || {
 				echo ""
-				error_msg "Returning..."
+				msg_err "Returning..."
 				sleep 2
 				clear
 				fun_connections
 			}
 		else
 			clear
-			print_header "              SQUID INSTALLER                "
+			banner_info "              SQUID INSTALLER                "
 			echo ""
 			IP=$(wget -qO- ipv4.icanhazip.com)
 			echo -ne "\033[1;32mTO CONTINUE CONFIRM YOUR IP: \033[1;37m"
 			read -e -i $IP ipdovps
 			[[ -z "$ipdovps" ]] && {
 				echo ""
-				error_msg "Invalid IP"
+				msg_err "Invalid IP"
 				echo ""
 				read -p "Enter your IP: " IP
 			}
@@ -120,13 +120,13 @@ fi
 			color_echo_n "WHICH PORTS DO YOU WANT TO USE IN THE SQUID " "yellow"
 			color_echo "?" "red"
 			echo ""
-			warning_msg "[!] SET THE PORTS IN SEQUENCE EX: 80 8080 8799"
+			msg_warn "[!] SET THE PORTS IN SEQUENCE EX: 80 8080 8799"
 			echo ""
 			color_echo_n "INFORM THE PORTS: " "green"
 			read portass
 			[[ -z "$portass" ]] && {
 				echo ""
-				error_msg "Invalid port!"
+				msg_err "Invalid port!"
 				sleep 3
 				fun_connections
 			}
@@ -145,7 +145,7 @@ fi
 				var_pay="/etc/squid3/payload.txt"
 			else
 				echo ""
-				error_msg "ERROR! CORRUPTED SQUID PROXY"
+				msg_err "ERROR! CORRUPTED SQUID PROXY"
 				sleep 2
 				fun_connections
 			fi
@@ -204,14 +204,14 @@ fi
 			echo ""
 			fun_bar 'sqd_conf'
 			echo ""
-			success_msg "SQUID SUCCESSFULLY INSTALLED!"
+			msg_ok "SQUID SUCCESSFULLY INSTALLED!"
 			sleep 2.5s
 			fun_connections
 		fi
 	}
 
 	addpt_sqd() {
-		print_header "         ADD PORT TO SQUID         "
+		banner_info "         ADD PORT TO SQUID         "
 		echo -e "\n\033[1;33mPORTS IN USE: \033[1;32m$sqdp\n"
 		if [[ -f "/etc/squid/squid.conf" ]]; then
 			var_sqd="/etc/squid/squid.conf"
@@ -228,7 +228,7 @@ fi
 		read pt
 		[[ -z "$pt" ]] && {
 			echo ""
-			error_msg "Invalid port!"
+			msg_err "Invalid port!"
 			sleep 2
 			clear
 			fun_connections
@@ -244,14 +244,14 @@ fi
 		echo ""
 		fun_bar 'service squid restart' 'service squid3 restart'
 		echo ""
-		success_msg "SUCCESSFULLY ADDED PORT!"
+		msg_ok "SUCCESSFULLY ADDED PORT!"
 		sleep 3
 		clear
 		fun_squid
 	}
 
 	rempt_sqd() {
-		print_header_red "        REMOVE SQUID PORT        "
+		banner_info_red "        REMOVE SQUID PORT        "
 		echo -e "\n\033[1;33mPORTS IN USE: \033[1;32m$sqdp\n"
 		if [[ -f "/etc/squid/squid.conf" ]]; then
 			var_sqd="/etc/squid/squid.conf"
@@ -270,7 +270,7 @@ fi
 		read pt
 		[[ -z "$pt" ]] && {
 			echo ""
-			error_msg "Invalid port!"
+			msg_err "Invalid port!"
 			sleep 2
 			clear
 			fun_connections
@@ -286,7 +286,7 @@ fi
 			echo ""
 			fun_bar 'service squid restart' 'service squid3 restart'
 			echo ""
-			success_msg "SUCCESSFULLY REMOVED PORT!"
+			msg_ok "SUCCESSFULLY REMOVED PORT!"
 			sleep 3.5s
 			clear
 			fun_squid
@@ -303,7 +303,7 @@ fi
 
 	fun_squid() {
 		[[ "$(netstat -nplt | grep -c 'squid')" = "0" ]] && inst_sqd
-		print_header "          MANAGE SQUID PROXY           "
+		banner_info "          MANAGE SQUID PROXY           "
 		[[ "$(netstat -nplt | grep -c 'squid')" != "0" ]] && {
 			sqdp=$(netstat -nplt | grep 'squid' | awk -F ":" {'print $4'} | xargs)
 			echo -e "\n\033[1;33mPORTS\033[1;37m: \033[1;32m$sqdp"
@@ -340,7 +340,7 @@ fi
 			fun_connections
 			;;
 		*)
-			error_msg "Invalid Option..."
+			msg_err "Invalid Option..."
 			sleep 2
 			fun_connections
 			;;
@@ -356,7 +356,7 @@ fi
 			else
 				stats='\033[1;31m○ '
 			fi
-			print_header "              MANAGE DROPBEAR               "
+			banner_info "              MANAGE DROPBEAR               "
 			echo -e "\n\033[1;33mPORTS\033[1;37m: \033[1;32m$dpbr"
 			echo ""
 			# Use menu_option function for menu items
@@ -408,7 +408,7 @@ fi
 				echo ""
 				fun_bar 'service dropbear restart' '/etc/init.d/dropbear restart'
 				echo ""
-				success_msg "PORT CHANGED SUCCESSFULLY!"
+				msg_ok "PORT CHANGED SUCCESSFULLY!"
 				sleep 3
 				clear
 				fun_connections
@@ -426,24 +426,24 @@ fi
 				}
 				fun_bar 'fun_dropunistall'
 				echo ""
-				success_msg "SUCCESSFULLY REMOVED DROPBEAR !"
+				msg_ok "SUCCESSFULLY REMOVED DROPBEAR !"
 				sleep 3
 				clear
 				fun_connections
 			elif [[ "$resposta" = '0' ]]; then
 				echo ""
-				error_msg "Returning..."
+				msg_err "Returning..."
 				sleep 2
 				fun_connections
 			else
 				echo ""
-				error_msg "Invalid option..."
+				msg_err "Invalid option..."
 				sleep 2
 				fun_connections
 			fi
 		else
 			clear
-			print_header "           DROPBEAR INSTALLER              "
+			banner_info "           DROPBEAR INSTALLER              "
 			echo -e "\n\033[1;33mYOU ARE ABOUT TO INSTALL DROPBEAR !\033[0m\n"
 			color_echo_n "DO YOU WANT TO CONTINUE " "green"
 			color_echo_n "? " "red"
@@ -455,7 +455,7 @@ fi
 				read porta
 				[[ -z "$porta" ]] && {
 					echo ""
-				error_msg "Invalid port!"
+				msg_err "Invalid port!"
 					sleep 3
 					clear
 					fun_connections
@@ -508,7 +508,7 @@ fi
 	inst_ssl() {
 		if netstat -nltp | grep 'stunnel4' 1>/dev/null 2>/dev/null; then
 			[[ $(netstat -nltp | grep 'stunnel4' | wc -l) != '0' ]] && sslt=$(netstat -nplt | grep stunnel4 | awk {'print $4'} | awk -F ":" {'print $2'} | xargs) || sslt="\033[1;31mUNAVAILABLE"
-			print_header "              MANAGE SSL TUNNEL               "
+			banner_info "              MANAGE SSL TUNNEL               "
 			echo -e "\n\033[1;33mPORTS\033[1;37m: \033[1;32m$sslt"
 			echo ""
 			# Use menu_option function for menu items
@@ -529,7 +529,7 @@ fi
 				echo ""
 				[[ -z "$porta" ]] && {
 					echo ""
-					error_msg "Invalid port!"
+					msg_err "Invalid port!"
 					sleep 2
 					clear
 					fun_connections
@@ -546,9 +546,9 @@ fi
 				fun_bar 'service stunnel4 restart' '/etc/init.d/stunnel4 restart'
 				echo ""
 				if netstat -nltp | grep 'stunnel4' >/dev/null; then
-					success_msg "PORT CHANGED SUCCESSFULLY !"
+					msg_ok "PORT CHANGED SUCCESSFULLY !"
 				else
-					error_msg "UNEXPECTED ERROR!"
+					msg_err "UNEXPECTED ERROR!"
 				fi
 				sleep 3.5s
 				clear
@@ -568,7 +568,7 @@ fi
 				echo ""
 				fun_bar 'del_ssl'
 				echo ""
-				success_msg "SUCCESSFULLY REMOVED SSL TUNNEL !"
+				msg_ok "SUCCESSFULLY REMOVED SSL TUNNEL !"
 				sleep 3
 				fun_connections
 			} || {
@@ -578,7 +578,7 @@ fi
 			}
 		else
 			clear
-			print_header "           SSL TUNNEL INSTALLER             "
+			banner_info "           SSL TUNNEL INSTALLER             "
 			echo -e "\n\033[1;33mYOU ARE ABOUT TO INSTALL SSL TUNNEL !\033[0m"
 			echo ""
 			color_echo_n "DO YOU WANT TO CONTINUE " "green"
@@ -591,7 +591,7 @@ fi
 				read -p "$(echo -e "\033[1;32mWHICH PORT DO YOU WANT TO USE? \033[1;37m")" -e -i 3128 porta
 				[[ -z "$porta" ]] && {
 					echo ""
-					error_msg "Invalid port!"
+					msg_err "Invalid port!"
 					sleep 3
 					clear
 					fun_connections
@@ -649,7 +649,7 @@ fi
 				fun_connections
 			} || {
 				echo ""
-				error_msg "Returning..."
+				msg_err "Returning..."
 				sleep 2
 				clear
 				fun_connections
@@ -729,7 +729,7 @@ fi
 				else
 					mult=$(echo -e "\033[1;31m○ ")
 				fi
-				print_header "          MANAGE OPENVPN           "
+				banner_info "          MANAGE OPENVPN           "
 				echo ""
 				echo -e "\033[1;33mPORT\033[1;37m: \033[1;32m$opnp"
 				echo ""
@@ -748,7 +748,7 @@ fi
 				case $option in
 				1)
 					clear
-					print_header "         CHANGE OPENVPN PORT        "
+					banner_info "         CHANGE OPENVPN PORT        "
 					echo ""
 					echo -e "\033[1;33mPORT IN USE: \033[1;32m$opnp"
 					echo ""
@@ -758,7 +758,7 @@ fi
 					read porta
 					[[ -z "$porta" ]] && {
 						echo ""
-						error_msg "Invalid port!"
+						msg_err "Invalid port!"
 						sleep 3
 						fun_connections
 					}
@@ -830,7 +830,7 @@ fi
 						echo ""
 						fun_bar 'rmv_open'
 						echo ""
-						success_msg "OPENVPN SUCCESSFULLY REMOVED!"
+						msg_ok "OPENVPN SUCCESSFULLY REMOVED!"
 						sleep 2
 						fun_connections
 					} || {
@@ -964,7 +964,7 @@ fi
 					;;
 				5)
 					clear
-					print_header "         CHANGE DNS HOST           "
+					banner_info "         CHANGE DNS HOST           "
 					echo ""
 					menu_option "1" "ADD HOST DNS" "red" "yellow"
 					menu_option "2" "REMOVE HOST DNS" "red" "yellow"
@@ -978,13 +978,13 @@ fi
 					read resp
 					[[ -z "$resp" ]] && {
 						echo ""
-						error_msg "Invalid option!"
+						msg_err "Invalid option!"
 						sleep 3
 						fun_openvpn
 					}
 					if [[ "$resp" = '1' ]]; then
 						clear
-						print_header "            Add Host DNS           "
+						banner_info "            Add Host DNS           "
 						echo ""
 						echo -e "\033[1;33mList of current hosts:\033[0m "
 						echo ""
@@ -997,23 +997,23 @@ fi
 						read host
 						if [[ -z $host ]]; then
 							echo ""
-							error_msg "        Empty or invalid field !       "
+							msg_err "        Empty or invalid field !       "
 							sleep 2
 							fun_openvpn
 						fi
 						if [[ "$(grep -w "$host" /etc/hosts | wc -l)" -gt "0" ]]; then
-							error_msg "    This host is already added  !    "
+							msg_err "    This host is already added  !    "
 							sleep 2
 							fun_openvpn
 						fi
 						sed -i "3i\127.0.0.1 $host" /etc/hosts
 						echo ""
-						success_msg "      Host added successfully !      "
+						msg_ok "      Host added successfully !      "
 						sleep 2
 						fun_openvpn
 					elif [[ "$resp" = '2' ]]; then
 						clear
-						print_header "            Remove Host DNS            "
+						banner_info "            Remove Host DNS            "
 						echo ""
 						echo -e "\033[1;33mList of current hosts:\033[0m "
 						echo ""
@@ -1042,7 +1042,7 @@ fi
 						read option
 						if [[ -z $option ]]; then
 							echo ""
-							error_msg "          Invalid option  !        "
+							msg_err "          Invalid option  !        "
 							sleep 2
 							fun_openvpn
 						fi
@@ -1050,7 +1050,7 @@ fi
 						hst=$(grep -v "127.0.0.1 $host" /etc/hosts)
 						echo "$hst" >/etc/hosts
 						echo ""
-						success_msg "      Host removed successfully !      "
+						msg_ok "      Host removed successfully !      "
 						sleep 2
 						fun_openvpn
 					elif [[ "$resp" = '3' ]]; then
@@ -1061,7 +1061,7 @@ fi
 						clear
 						nano /etc/hosts
 						echo ""
-						success_msg "CHANGED SUCCESSFULLY!"
+						msg_ok "CHANGED SUCCESSFULLY!"
 						sleep 3
 						fun_openvpn
 					elif [[ "$resp" = '0' ]]; then
@@ -1071,7 +1071,7 @@ fi
 						fun_connections
 					else
 						echo ""
-						error_msg "Invalid option !"
+						msg_err "Invalid option !"
 						sleep 2
 						fun_openvpn
 					fi
@@ -1081,7 +1081,7 @@ fi
 					;;
 				*)
 					echo ""
-					error_msg "Invalid option !"
+					msg_err "Invalid option !"
 					sleep 2
 					fun_openvpn
 					;;
@@ -1089,7 +1089,7 @@ fi
 			done
 		} || {
 			clear
-			print_header "              OPENVPN INSTALLER               "
+			banner_info "              OPENVPN INSTALLER               "
 			echo ""
 			# OpenVPN installer and creation of the first user
 			echo -e "\033[1;33mANSWER THE QUESTIONS TO START INSTALLATION"
@@ -1098,7 +1098,7 @@ fi
 			read -e -i $IP IP
 			[[ -z "$IP" ]] && {
 				echo ""
-				error_msg "Invalid IP!"
+				msg_err "Invalid IP!"
 				sleep 3
 				fun_connections
 			}
@@ -1106,7 +1106,7 @@ fi
 			read -p "$(echo -e "\033[1;32mWHICH PORT DO YOU WANT TO USE? \033[1;37m")" -e -i 1194 porta
 			[[ -z "$porta" ]] && {
 				echo ""
-				error_msg "Invalid port!"
+				msg_err "Invalid port!"
 				sleep 2
 				fun_connections
 			}
@@ -1352,10 +1352,10 @@ exit 0' >$RCLOCAL
 			newclient "SSHPLUS"
 			if [[ "$(netstat -nplt | grep -wc 'openvpn')" != '0' ]]; then
 				echo ""
-				success_msg "OPENVPN SUCCESSFULLY INSTALLED"
+				msg_ok "OPENVPN SUCCESSFULLY INSTALLED"
 			else
 				echo ""
-				error_msg "ERROR! INSTALLATION CORRUPTED"
+				msg_err "ERROR! INSTALLATION CORRUPTED"
 			fi
 		}
 		sed -i '$ i\echo 1 > /proc/sys/net/ipv4/ip_forward' /etc/rc.local
@@ -1372,7 +1372,7 @@ exit 0' >$RCLOCAL
 
 	fun_socks() {
 		clear
-		print_header "            MANAGING SOCKS PROXY            "
+		banner_info "            MANAGING SOCKS PROXY            "
 		echo ""
 		[[ $(netstat -nplt | grep -wc 'python') != '0' ]] && {
 			sks='\033[1;32mON'
@@ -1401,7 +1401,7 @@ exit 0' >$RCLOCAL
 		if [[ "$resposta" = '1' ]]; then
 			if ps x | grep -w proxy.py | grep -v grep 1>/dev/null 2>/dev/null; then
 				clear
-				print_header_red "             PROXY SOCKS              "
+				banner_info_red "             PROXY SOCKS              "
 				echo ""
 				fun_socksoff() {
 					for pidproxy in $(screen -ls | grep ".proxy" | awk {'print $1'}); do
@@ -1417,18 +1417,18 @@ exit 0' >$RCLOCAL
 				echo ""
 				fun_bar 'fun_socksoff'
 				echo ""
-				success_msg "SOCKS PROXY DISABLED SUCCESSFULLY!"
+				msg_ok "SOCKS PROXY DISABLED SUCCESSFULLY!"
 				sleep 3
 				fun_socks
 			else
 				clear
-				print_header "             SOCKS PROXY              "
+				banner_info "             SOCKS PROXY              "
 				echo ""
 				echo -ne "\033[1;32mWHICH PORT DO YOU WANT TO USE \033[1;33m?\033[1;37m: "
 				read porta
 				[[ -z "$porta" ]] && {
 					echo ""
-					error_msg "Invalid port!"
+					msg_err "Invalid port!"
 					sleep 3
 					clear
 					fun_connections
@@ -1449,14 +1449,14 @@ exit 0' >$RCLOCAL
 				echo ""
 				fun_bar 'fun_inisocks'
 				echo ""
-				success_msg "SOCKS ENABLED SUCCESSFULLY"
+				msg_ok "SOCKS ENABLED SUCCESSFULLY"
 				sleep 3
 				fun_socks
 			fi
 		elif [[ "$resposta" = '2' ]]; then
 			if ps x | grep -w open.py | grep -v grep 1>/dev/null 2>/dev/null; then
 				clear
-				print_header_red "            SOCKS OPENVPN             "
+				banner_info_red "            SOCKS OPENVPN             "
 				echo ""
 				fun_socksopenoff() {
 					for pidproxy in $(screen -list | grep -w "openpy" | awk {'print $1'}); do
@@ -1477,13 +1477,13 @@ exit 0' >$RCLOCAL
 				fun_socks
 			else
 				clear
-				print_header_red "            SOCKS OPENVPN             "
+				banner_info_red "            SOCKS OPENVPN             "
 				echo ""
 				echo -ne "\033[1;32mWHICH PORT DO YOU WANT TO USE \033[1;33m?\033[1;37m: "
 				read porta
 				[[ -z "$porta" ]] && {
 					echo ""
-					error_msg "Invalid port!"
+					msg_err "Invalid port!"
 					sleep 2
 					clear
 					fun_connections
@@ -1525,7 +1525,7 @@ exit 0' >$RCLOCAL
 				read porta
 				[[ -z "$porta" ]] && {
 					echo ""
-					error_msg "Invalid port!"
+					msg_err "Invalid port!"
 					sleep 2
 					clear
 					fun_connections
@@ -1563,14 +1563,14 @@ exit 0' >$RCLOCAL
 				read msgg
 				[[ -z "$msgg" ]] && {
 					echo ""
-					error_msg "Invalid status!"
+					msg_err "Invalid status!"
 					sleep 2
 					fun_connections
 				}
 				[[ ${msgg} != ?(+|-)+([a-zA-Z0-9-. ]) ]] && {
 					# Use color function for error message - handles fallback internally
 					echo ""
-					warning_msg "[!] AVOID SPECIAL CHARACTERS"
+					msg_warn "[!] AVOID SPECIAL CHARACTERS"
 					sleep 2
 					fun_socks
 				}
@@ -1635,7 +1635,7 @@ exit 0' >$RCLOCAL
 				echo ""
 				fun_bar 'restartsocks'
 				echo ""
-				success_msg "STATUS CHANGED SUCCESSFULLY!"
+				msg_ok "STATUS CHANGED SUCCESSFULLY!"
 				sleep 2
 				fun_socks
 			else
@@ -1651,7 +1651,7 @@ exit 0' >$RCLOCAL
 			fun_connections
 		else
 			echo ""
-			error_msg "Invalid option !"
+			msg_err "Invalid option !"
 			sleep 1
 			fun_socks
 		fi
@@ -1668,7 +1668,7 @@ exit 0' >$RCLOCAL
 			"$(dirname "$0")/multiport"
 		else
 			clear
-			error_msg "Multi-port module not found!"
+			msg_err "Multi-port module not found!"
 			sleep 2
 		fi
 		fun_connections
@@ -1677,10 +1677,10 @@ exit 0' >$RCLOCAL
 	fun_sslh() {
 		[[ "$(netstat -nltp | grep 'sslh' | wc -l)" = '0' ]] && {
 			clear
-			print_header "             SSLH INSTALLER               "
+			banner_info "             SSLH INSTALLER               "
 			echo ""
 			echo ""
-			warning_msg "[!] A PORT 443 WILL BE USED BY STANDARD"
+			msg_warn "[!] A PORT 443 WILL BE USED BY STANDARD"
 			echo ""
 			echo -ne "\033[1;32mREALLY WANTS TO INSTALL SSLH \033[1;31m? \033[1;33m[y/n]:\033[1;37m "
 			read resp
@@ -1699,10 +1699,10 @@ exit 0' >$RCLOCAL
 				fun_bar '/etc/init.d/sslh restart && service sslh restart'
 				if [[ $(netstat -nplt | grep -w 'sslh' | wc -l) != '0' ]]; then
 					echo ""
-					success_msg "SUCCESSFULLY INSTALLED !"
+					msg_ok "SUCCESSFULLY INSTALLED !"
 				else
 					echo ""
-					error_msg "UNEXPECTED ERROR !"
+					msg_err "UNEXPECTED ERROR !"
 				fi
 				sleep 3
 				fun_connections
@@ -1713,7 +1713,7 @@ exit 0' >$RCLOCAL
 			}
 		} || {
 			clear
-			print_header_red "             REMOVE SSLH               "
+			banner_info_red "             REMOVE SSLH               "
 			echo ""
 			color_echo_n "DO YOU REALLY WANT TO REMOVE SSLH " "green"
 			color_echo_n "? " "red"
@@ -1743,7 +1743,7 @@ exit 0' >$RCLOCAL
 		while true $x != "ok"; do
 			[[ ! -e '/home/sshplus' ]] && exit 0
 			clear
-			print_header "                CONNECTION MODE                 "
+			banner_info "                CONNECTION MODE                 "
 			echo ""
 			echo -e "\033[1;32mSERVICE: \033[1;33mOPENSSH \033[1;32mPORT: \033[1;37m$(grep 'Port' /etc/ssh/sshd_config | cut -d' ' -f2 | grep -v 'no' | xargs)" && sts6="\033[1;32m◉ "
 
@@ -1848,7 +1848,7 @@ exit 0' >$RCLOCAL
 				exit
 				;;
 			*)
-				error_msg "Invalid option !"
+				msg_err "Invalid option !"
 				sleep 2
 				;;
 			esac

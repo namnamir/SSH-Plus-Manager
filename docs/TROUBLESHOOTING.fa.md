@@ -160,7 +160,7 @@ alias menu='/bin/menu'
 - **speedtest-cli** با apt و در صورت شکست با pip امتحان می‌شود. اگر هر دو ناموفق بودند، دستی نصب کنید:  
   `pip3 install speedtest-cli`
 
-### خطای رنگ یا «command not found» برای `get_color_code`، `print_header` و نظیر آن
+### خطای رنگ یا «command not found» برای `get_color_code`، `banner_info` و نظیر آن
 
 - این‌ها از ماژول **colors** می‌آیند. منو آن را از `/etc/SSHPlus/colors` یا `/bin/colors` بار می‌کند.
 - اگر منو را از کپیِ نصب‌نشده با نصب‌کننده اجرا کنید (مثلاً فقط چند فایل زیر `/bin`)، ممکن است colors نباشد.  

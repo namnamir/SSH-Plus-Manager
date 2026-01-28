@@ -12,7 +12,7 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "              VPS INFO                 "
+banner_info "              VPS INFO                 "
 echo ""
 g=$(get_color_code "green")
 w=$(get_color_code "white")

@@ -10,7 +10,7 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "   Change expiration date   "
+banner_info "   Change expiration date   "
 echo ""
 color_echo " LIST OF USERS AND EXPIRY DATE:" "yellow"
 echo ""
@@ -85,14 +85,14 @@ fi
 if [[ -z $option ]]
 then
 	echo ""
-	error_msg "Error, Username empty or invalid!"
+	msg_err "Error, Username empty or invalid!"
 	exit 1
 fi
 usuario=$(echo -e "${_userPass}" | awk -v o="$option" -F: 'NF>=2 && $1+0==o+0 {print $2; exit}')
 if [[ -z $usuario ]]
 then
 	echo ""
-	error_msg "Error, Username empty or invalid!!!"
+	msg_err "Error, Username empty or invalid!!!"
 	echo ""
 	exit 1
 else
@@ -116,7 +116,7 @@ else
 	    inputdate="${inputdate//[[:space:]]/}"
 	    if [[ -z "$inputdate" ]]; then
 		echo ""
-		error_msg "You entered an invalid or non-existent date!"
+		msg_err "You entered an invalid or non-existent date!"
 		echo "Enter a valid date in DAY/MONTH/YEAR format, or a number of days (e.g. 30 or 101)"
 		echo "For example: 21/04/2021 or 101"
 		echo ""
@@ -124,12 +124,12 @@ else
 	    fi
 	    # Integer days (e.g. 30, 101)
 	    if [[ "$inputdate" =~ ^[0-9]+$ ]]; then
-		[[ "$inputdate" -lt 1 ]] && { echo ""; error_msg "Days must be at least 1"; echo ""; exit 1; }
+		[[ "$inputdate" -lt 1 ]] && { echo ""; msg_err "Days must be at least 1"; echo ""; exit 1; }
 		udata=$(date "+%d/%m/%Y" -d "+${inputdate} days" 2>/dev/null)
 		sysdate=$(date "+%Y-%m-%d" -d "+${inputdate} days" 2>/dev/null)
 		if [[ -z "$udata" || -z "$sysdate" ]]; then
 		    echo ""
-		    error_msg "Invalid number of days. Enter a positive integer (e.g. 30 or 101)"
+		    msg_err "Invalid number of days. Enter a positive integer (e.g. 30 or 101)"
 		    echo ""
 		    exit 1
 		fi
@@ -140,14 +140,14 @@ else
 		    sysdate="$(echo "$inputdate" | awk -v FS=/ -v OFS=- '{print $3,$2,$1}')"
 		else
 		    echo ""
-		    error_msg "You entered an invalid or non-existent date!"
+		    msg_err "You entered an invalid or non-existent date!"
 		    echo "Use DAY/MONTH/YEAR (e.g. 21/04/2021) or a number of days (e.g. 101)"
 		    echo ""
 		    exit 1
 		fi
 		if ! date "+%Y-%m-%d" -d "$sysdate" >/dev/null 2>&1; then
 		    echo ""
-		    error_msg "You entered an invalid or non-existent date!"
+		    msg_err "You entered an invalid or non-existent date!"
 		    echo "Enter a valid date in DAY/MONTH/YEAR format"
 		    echo "For example: 21/04/2021"
 		    echo ""
@@ -159,7 +159,7 @@ else
 	    timemachine="$(date -d "$sysdate" +"%Y%m%d")"
 	    if [[ "$today" -ge "$timemachine" ]]; then
 		echo ""
-		error_msg "You entered a past date or the current day!"
+		msg_err "You entered a past date or the current day!"
 		echo "Enter a future date (DAY/MONTH/YEAR) or a number of days (e.g. 101)"
 		echo "For example: 21/04/2021 or 30"
 		echo ""
@@ -167,12 +167,12 @@ else
 	    fi
 	    chage -E "$sysdate" "$usuario"
 	    echo ""
-	    success_msg "User Success $usuario new date: $udata"
+	    msg_ok "User Success $usuario new date: $udata"
 	    echo ""
 	    exit 0
 	else
 		echo ""
-		error_msg "The user $usuario does not exist!"
+		msg_err "The user $usuario does not exist!"
 		echo ""
 		exit 1
 	fi

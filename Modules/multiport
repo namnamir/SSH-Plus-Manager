@@ -28,7 +28,7 @@ check_dependencies() {
         pkg_manager="pacman"
     fi
 
-    info_msg "Checking dependencies..."
+    msg_info "Checking dependencies..."
 
     # Check for openssh-server
     if ! command -v sshd > /dev/null 2>&1; then
@@ -46,7 +46,7 @@ check_dependencies() {
 
     # Check for systemctl (from systemd) - optional but recommended
     if ! command -v systemctl > /dev/null 2>&1; then
-        warning_msg "systemd not found. Some features may not work."
+        msg_warn "systemd not found. Some features may not work."
     fi
 
     # Check for ufw - REQUIRED for firewall configuration
@@ -68,22 +68,22 @@ check_dependencies() {
     # If installation is needed, check for root access
     if [[ $needs_root == true ]]; then
         if [[ $EUID -ne 0 ]]; then
-            error_msg "Missing dependencies detected. This script must be run as root to install them."
-            error_msg "Missing: ${missing_deps[*]}"
-            error_msg "Please run: sudo $0"
+            msg_err "Missing dependencies detected. This script must be run as root to install them."
+            msg_err "Missing: ${missing_deps[*]}"
+            msg_err "Please run: sudo $0"
             return 1
         fi
 
         if [[ -z "$pkg_manager" ]]; then
-            error_msg "No supported package manager found. Please install dependencies manually:"
-            error_msg "Missing: ${missing_deps[*]}"
+            msg_err "No supported package manager found. Please install dependencies manually:"
+            msg_err "Missing: ${missing_deps[*]}"
             return 1
         fi
     fi
 
     # Install missing dependencies if needed
     if [[ $install_needed == true ]]; then
-        info_msg "Installing missing dependencies: ${missing_deps[*]}"
+        msg_info "Installing missing dependencies: ${missing_deps[*]}"
 
         case "$pkg_manager" in
             apt-get)
@@ -185,20 +185,20 @@ check_dependencies() {
         done
 
         if [[ ${#failed[@]} -gt 0 ]]; then
-            error_msg "Failed to install: ${failed[*]}"
-            error_msg "Please install them manually and try again."
+            msg_err "Failed to install: ${failed[*]}"
+            msg_err "Please install them manually and try again."
             return 1
         else
-            success_msg "All dependencies installed successfully!"
+            msg_ok "All dependencies installed successfully!"
         fi
     else
-        success_msg "All dependencies are installed."
+        msg_ok "All dependencies are installed."
     fi
 
     # Verify sshd_config exists
     if [[ ! -f "/etc/ssh/sshd_config" ]]; then
-        error_msg "SSH configuration file not found: /etc/ssh/sshd_config"
-        error_msg "Please ensure OpenSSH server is properly installed."
+        msg_err "SSH configuration file not found: /etc/ssh/sshd_config"
+        msg_err "Please ensure OpenSSH server is properly installed."
         return 1
     fi
 
@@ -210,7 +210,7 @@ verif_ptrs() {
     local port=$1
     if [[ ! "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
         echo ""
-        error_msg "Invalid port number! Port must be between 1 and 65535."
+        msg_err "Invalid port number! Port must be between 1 and 65535."
         return 1
     fi
     return 0
@@ -219,7 +219,7 @@ verif_ptrs() {
 # Function to check if systemd is available
 check_systemd() {
     if ! command -v systemctl > /dev/null 2>&1; then
-        error_msg "systemd is not available on this system!"
+        msg_err "systemd is not available on this system!"
         return 1
     fi
     return 0
@@ -320,7 +320,7 @@ add_port_sshd() {
     # Check if port already exists using the helper function
     if port_exists "$port"; then
         if [[ "$quiet" != "true" ]]; then
-            warning_msg "Port $port is already in sshd_config"
+            msg_warn "Port $port is already in sshd_config"
         fi
         return 0
     fi
@@ -343,7 +343,7 @@ add_port_sshd() {
     # Ensure required SSH directories exist before validation
     if ! ensure_ssh_directories; then
         if [[ "$quiet" != "true" ]]; then
-            error_msg "Failed to create required SSH directories. Please run as root or create /run/sshd manually."
+            msg_err "Failed to create required SSH directories. Please run as root or create /run/sshd manually."
         fi
         # Still try to validate - sometimes sshd can work without the directory
     fi
@@ -354,7 +354,7 @@ add_port_sshd() {
         # Revert the change - be more specific with sed pattern
         sed -i "/^[[:space:]]*Port[[:space:]]\+${port}[[:space:]]*$/d" /etc/ssh/sshd_config
         if [[ "$quiet" != "true" ]]; then
-            error_msg "Invalid SSH configuration! Port $port not added."
+            msg_err "Invalid SSH configuration! Port $port not added."
             echo "$validation_output" | head -3 | while read line; do
                 color_echo "  $line" "red"
             done
@@ -370,12 +370,12 @@ remove_port_sshd() {
     local port=$1
 
     if [[ "$port" == "22" ]]; then
-        warning_msg "Cannot remove default port 22!"
+        msg_warn "Cannot remove default port 22!"
         return 1
     fi
 
     if ! grep -q "^Port $port" /etc/ssh/sshd_config 2>/dev/null; then
-        error_msg "Port $port is not configured in sshd_config"
+        msg_err "Port $port is not configured in sshd_config"
         return 1
     fi
 
@@ -383,7 +383,7 @@ remove_port_sshd() {
 
     # Validate configuration
     if ! sshd -t > /dev/null 2>&1; then
-        error_msg "Invalid SSH configuration! Reverting changes..."
+        msg_err "Invalid SSH configuration! Reverting changes..."
         # Restore port
         add_port_sshd "$port"
         return 1
@@ -427,16 +427,16 @@ configure_ufw() {
 
     # UFW is required - should be installed by check_dependencies, but verify
     if ! command -v ufw > /dev/null 2>&1; then
-        error_msg "UFW is required but not installed!"
-        error_msg "Please install UFW manually: apt-get install ufw (or yum/dnf/pacman equivalent)"
+        msg_err "UFW is required but not installed!"
+        msg_err "Please install UFW manually: apt-get install ufw (or yum/dnf/pacman equivalent)"
         return 1
     fi
 
     # Enable UFW if not already enabled
     if ! ufw status | grep -q "Status: active"; then
-        info_msg "Enabling UFW..."
+        msg_info "Enabling UFW..."
         if ! ufw --force enable > /dev/null 2>&1; then
-            error_msg "Failed to enable UFW!"
+            msg_err "Failed to enable UFW!"
             return 1
         fi
     fi
@@ -450,11 +450,11 @@ configure_ufw() {
     done <<< "$ports"
 
     if [[ ${#failed_ports[@]} -gt 0 ]]; then
-        warning_msg "Failed to configure firewall rules for ports: ${failed_ports[*]}"
+        msg_warn "Failed to configure firewall rules for ports: ${failed_ports[*]}"
         return 1
     fi
 
-    success_msg "UFW firewall rules updated"
+    msg_ok "UFW firewall rules updated"
     return 0
 }
 
@@ -472,14 +472,14 @@ verify_setup() {
             color_echo "  ✓ Port $port" "white"
         done
     else
-        warning_msg "No SSH ports found listening!"
+        msg_warn "No SSH ports found listening!"
     fi
 
     # Check systemd socket status
     if systemctl is-active --quiet ssh.socket; then
-        success_msg "systemd ssh.socket is active"
+        msg_ok "systemd ssh.socket is active"
     else
-        error_msg "systemd ssh.socket is not active!"
+        msg_err "systemd ssh.socket is not active!"
     fi
 
     # Check sshd accepted ports
@@ -496,7 +496,7 @@ verify_setup() {
 main_menu() {
     while true; do
         clear
-        print_header "         SSH MULTI-PORT SETUP          "
+        banner_info "         SSH MULTI-PORT SETUP          "
         echo ""
         show_current_ports
         echo ""
@@ -512,13 +512,13 @@ main_menu() {
         case "$option" in
             1)
                 clear
-                print_header "         ADD PORT TO SSH          "
+                banner_info "         ADD PORT TO SSH          "
                 echo ""
                 color_echo_n "Enter port number: " "green"
                 read -r port
 
                 if [[ -z "$port" ]]; then
-                    error_msg "Port cannot be empty!"
+                    msg_err "Port cannot be empty!"
                     sleep 2
                     continue
                 fi
@@ -542,36 +542,36 @@ main_menu() {
                         fi
                     fi
                     if configure_ufw; then
-                        success_msg "Port $port added successfully!"
+                        msg_ok "Port $port added successfully!"
                     else
-                        error_msg "Port $port added but firewall configuration failed!"
-                        error_msg "Ports may be blocked by firewall. Please configure UFW manually."
+                        msg_err "Port $port added but firewall configuration failed!"
+                        msg_err "Ports may be blocked by firewall. Please configure UFW manually."
                     fi
                 else
-                    error_msg "Failed to add port $port!"
+                    msg_err "Failed to add port $port!"
                 fi
 
                 sleep 3
                 ;;
             2)
                 clear
-                print_header_red "       REMOVE PORT FROM SSH        "
+                banner_danger "       REMOVE PORT FROM SSH        "
                 echo ""
                 show_current_ports
                 echo ""
-                warning_msg "Cannot remove default port 22!"
+                msg_warn "Cannot remove default port 22!"
                 echo ""
                 color_echo_n "Enter port number to remove: " "green"
                 read -r port
 
                 if [[ -z "$port" ]]; then
-                    error_msg "Port cannot be empty!"
+                    msg_err "Port cannot be empty!"
                     sleep 2
                     continue
                 fi
 
                 if [[ "$port" == "22" ]]; then
-                    error_msg "Cannot remove default port 22!"
+                    msg_err "Cannot remove default port 22!"
                     sleep 2
                     continue
                 fi
@@ -592,16 +592,16 @@ main_menu() {
                         fi
                     fi
 
-                    success_msg "Port $port removed successfully!"
+                    msg_ok "Port $port removed successfully!"
                 else
-                    error_msg "Failed to remove port $port!"
+                    msg_err "Failed to remove port $port!"
                 fi
 
                 sleep 3
                 ;;
             3)
                 clear
-                print_header "      QUICK MULTI-PORT SETUP       "
+                banner_info "      QUICK MULTI-PORT SETUP       "
                 echo ""
                 color_echo "Enter ports separated by comma:" "yellow"
                 color_echo "Example: 22, 3398, 443, 80, 8080" "white"
@@ -610,16 +610,16 @@ main_menu() {
                 read -r ports_input
 
                 if [[ -z "$ports_input" ]]; then
-                    error_msg "No ports entered!"
+                    msg_err "No ports entered!"
                     sleep 2
                     continue
                 fi
 
                 # Ensure required SSH directories exist
                 if ! ensure_ssh_directories; then
-                    error_msg "Warning: Could not create /run/sshd directory."
-                    error_msg "Please create it manually: mkdir -p /run/sshd && chmod 0755 /run/sshd"
-                    error_msg "Or run this script as root."
+                    msg_err "Warning: Could not create /run/sshd directory."
+                    msg_err "Please create it manually: mkdir -p /run/sshd && chmod 0755 /run/sshd"
+                    msg_err "Or run this script as root."
                     sleep 3
                     continue
                 fi
@@ -627,17 +627,17 @@ main_menu() {
                 # Create backup of sshd_config before making changes
                 local backup_file="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
                 if cp /etc/ssh/sshd_config "$backup_file" 2>/dev/null; then
-                    info_msg "Backup created: $backup_file"
+                    msg_info "Backup created: $backup_file"
                 fi
 
                 # Validate current config before making changes
                 local validation_error=$(sshd -t 2>&1)
                 if [[ $? -ne 0 ]]; then
-                    error_msg "Current SSH configuration has errors:"
+                    msg_err "Current SSH configuration has errors:"
                     echo "$validation_error" | while read line; do
                         color_echo "  $line" "red"
                     done
-                    error_msg "Please fix existing configuration errors first!"
+                    msg_err "Please fix existing configuration errors first!"
                     sleep 3
                     continue
                 fi
@@ -652,13 +652,13 @@ main_menu() {
                         if verif_ptrs "$port" 2>/dev/null; then
                             ports_list="$ports_list $port"
                         else
-                            warning_msg "Skipping invalid port: $port"
+                            msg_warn "Skipping invalid port: $port"
                         fi
                     fi
                 done
 
                 if [[ -z "$ports_list" ]]; then
-                    error_msg "No valid ports to configure!"
+                    msg_err "No valid ports to configure!"
                     sleep 2
                     continue
                 fi
@@ -696,21 +696,21 @@ main_menu() {
                 if [[ $added_count -gt 0 ]]; then
                     validation_error=$(sshd -t 2>&1)
                     if [[ $? -ne 0 ]]; then
-                        error_msg "Configuration validation failed after adding ports!"
+                        msg_err "Configuration validation failed after adding ports!"
                         echo "$validation_error" | while read line; do
                             color_echo "  $line" "red"
                         done
 
                         # Restore from backup
                         if [[ -f "$backup_file" ]]; then
-                            warning_msg "Restoring original configuration from backup..."
+                            msg_warn "Restoring original configuration from backup..."
                             if cp "$backup_file" /etc/ssh/sshd_config 2>/dev/null; then
-                                info_msg "Configuration restored successfully"
+                                msg_info "Configuration restored successfully"
                             else
-                                error_msg "Failed to restore backup! Manual intervention required."
+                                msg_err "Failed to restore backup! Manual intervention required."
                             fi
                         else
-                            error_msg "No backup found! Please check /etc/ssh/sshd_config manually"
+                            msg_err "No backup found! Please check /etc/ssh/sshd_config manually"
                         fi
                         sleep 3
                         continue
@@ -719,11 +719,11 @@ main_menu() {
                     # All ports already exist, just validate current config
                     validation_error=$(sshd -t 2>&1)
                     if [[ $? -ne 0 ]]; then
-                        error_msg "Current SSH configuration has errors:"
+                        msg_err "Current SSH configuration has errors:"
                         echo "$validation_error" | while read line; do
                             color_echo "  $line" "red"
                         done
-                        error_msg "Please fix configuration errors manually!"
+                        msg_err "Please fix configuration errors manually!"
                         sleep 3
                         continue
                     fi
@@ -742,26 +742,26 @@ main_menu() {
                     fi
 
                     if configure_ufw; then
-                        success_msg "Multi-port setup completed!"
+                        msg_ok "Multi-port setup completed!"
                     else
-                        error_msg "Multi-port setup completed but firewall configuration failed!"
-                        error_msg "Ports may be blocked. Please configure UFW manually."
+                        msg_err "Multi-port setup completed but firewall configuration failed!"
+                        msg_err "Ports may be blocked. Please configure UFW manually."
                     fi
                     if [[ $added_count -gt 0 ]]; then
-                        info_msg "Added $added_count new port(s)."
+                        msg_info "Added $added_count new port(s)."
                     fi
                     if [[ $skipped_count -gt 0 ]]; then
-                        info_msg "Skipped $skipped_count port(s) that were already configured."
+                        msg_info "Skipped $skipped_count port(s) that were already configured."
                     fi
                     if [[ $failed_count -gt 0 ]]; then
-                        warning_msg "$failed_count port(s) could not be added."
+                        msg_warn "$failed_count port(s) could not be added."
                     fi
                     verify_setup
                 elif [[ $skipped_count -gt 0 ]]; then
-                    info_msg "All ports are already configured."
+                    msg_info "All ports are already configured."
                     verify_setup
                 else
-                    warning_msg "No ports were configured."
+                    msg_warn "No ports were configured."
                 fi
 
                 sleep 5
@@ -776,7 +776,7 @@ main_menu() {
                 return 0
                 ;;
             *)
-                error_msg "Invalid option!"
+                msg_err "Invalid option!"
                 sleep 2
                 ;;
         esac
@@ -785,7 +785,7 @@ main_menu() {
 
 # Check dependencies before starting
 if ! check_dependencies; then
-    error_msg "Dependency check failed. Exiting..."
+    msg_err "Dependency check failed. Exiting..."
     exit 1
 fi
 

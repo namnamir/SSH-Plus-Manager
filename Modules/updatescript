@@ -10,7 +10,7 @@ elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
 
-print_header "           UPDATE SCRIPT                "
+banner_info "           UPDATE SCRIPT                "
 echo ""
 
 repo_url="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
@@ -33,13 +33,13 @@ color_echo "  Latest version:  v${remote_ver}" "cyan"
 echo ""
 
 if [[ -z "$need_update" ]]; then
-	success_msg "Already up to date."
+	msg_ok "Already up to date."
 	sleep 2
 	exec /bin/menu
 	exit 0
 fi
 
-warning_msg "Update available. This will download all manager files from the repository and overwrite local copies."
+msg_warn "Update available. This will download all manager files from the repository and overwrite local copies."
 color_echo_n "Continue? [y/N]: " "yellow"
 read -r confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -51,7 +51,7 @@ fi
 
 [[ -d /etc/SSHPlus ]] || mkdir -p /etc/SSHPlus
 tmpdir="/tmp/sshplus_update_$$"
-mkdir -p "$tmpdir" || { error_msg "Cannot create temp directory."; sleep 2; exec /bin/menu; exit 1; }
+mkdir -p "$tmpdir" || { msg_err "Cannot create temp directory."; sleep 2; exec /bin/menu; exit 1; }
 
 color_echo "Fetching files from repository..." "green"
 echo ""
@@ -87,11 +87,11 @@ rm -rf "$tmpdir" 2>/dev/null
 if [[ $updated -gt 0 ]]; then
 	echo "$remote_ver" > /etc/SSHPlus/version 2>/dev/null
 	echo "$remote_ver" > /bin/version 2>/dev/null
-	success_msg "Update finished: $updated file(s) updated. Version set to v${remote_ver}."
+	msg_ok "Update finished: $updated file(s) updated. Version set to v${remote_ver}."
 fi
 echo ""
-[[ $failed -gt 0 ]] && warning_msg "$failed file(s) could not be updated (missing in repo or permission error)."
-[[ $updated -eq 0 ]] && [[ $failed -eq 0 ]] && info_msg "No files were changed."
+[[ $failed -gt 0 ]] && msg_warn "$failed file(s) could not be updated (missing in repo or permission error)."
+[[ $updated -eq 0 ]] && [[ $failed -eq 0 ]] && msg_info "No files were changed."
 color_echo "To use the new menu, run: menu" "cyan"
 sleep 3
 exec /bin/menu

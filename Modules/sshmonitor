@@ -9,8 +9,13 @@ elif [[ -f /bin/colors ]]; then
 elif [[ -f "$(dirname "$0")/colors" ]]; then
 	source "$(dirname "$0")/colors"
 fi
-
-[[ ! -e /usr/lib/sshplus ]] && exit 0
+if [[ -z "${SSHPLUS_FROM_REPO:-}" ]]; then
+	_mod_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+	_repo_root="$(cd "${_mod_dir}/.." 2>/dev/null && pwd)"
+	[[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]] && export SSHPLUS_FROM_REPO=1
+	unset -v _mod_dir _repo_root
+fi
+[[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && exit 0
 
 database="/root/users.db"
 USAGEDIR="/var/lib/SSHPlus"
@@ -321,7 +326,7 @@ _do_display() {
 	sum_down=$(_fmt_bytes "$sum_r")
 	sum_up=$(_fmt_bytes "$sum_w")
 	_body="${yellow_code}Total: ${white_code}${n_total} users${yellow_code}  |  🟢 ${n_online}  🔴 ${n_offline}  ⚪ ${n_expired}  🟡 ${n_expiring}  |  Total ↓${sum_down}  ↑${sum_up}${reset_code}"$'\n\n'
-	_body+="$(print_header " User      Conn  Time      Down/Up      Total↓/↑    TotalTime  Days   Last (datetime)  Password   ")"$'\n\n'
+	_body+="$(banner_info " User      Conn  Time      Down/Up      Total↓/↑    TotalTime  Days   Last (datetime)  Password   ")"$'\n\n'
 	for row in "${_rows[@]}"; do _body+="$row"$'\n'; done
 	_body+=$'\n'"${yellow_code}Press Enter to return to menu (auto-refresh 10s)${reset_code}"
 
