@@ -22,6 +22,29 @@ elif [[ -f "${_mod_dir}/colors" ]]; then
 fi
 unset -v _mod_dir _repo_root
 
+# If loaded colors doesn't provide header_line (e.g. old installed copy), define it so header layout works
+if ! type header_line &>/dev/null; then
+	header_line() {
+		local left="$1" right="$2" cols pad
+		cols="$(tput cols 2>/dev/null || echo 80)"
+		pad=$(( cols - ${#left} - ${#right} ))
+		[[ $pad -lt 1 ]] && pad=1
+		printf "%s%*s%s\n" "$left" "$pad" "" "$right"
+	}
+fi
+# If loaded colors doesn't provide menu_option_n (e.g. old installed copy), define it so two-column layout works
+if ! type menu_option_n &>/dev/null; then
+	menu_option_n() {
+		local n="$1" text="$2"
+		# Use c() if available, else raw so layout still works
+		if type c &>/dev/null && type reset &>/dev/null; then
+			printf "%b[%02d]%b %b%s%b" "$(c ui_menu_num 2>/dev/null)" "$n" "$(reset 2>/dev/null)" "$(c ui_menu_txt 2>/dev/null)" "$text" "$(reset 2>/dev/null)"
+		else
+			printf "[%02d] %s" "$n" "$text"
+		fi
+	}
+fi
+
 # Progress bar function - shows visual progress for long operations
 fun_bar() {
 	local command1="$1"
@@ -275,8 +298,10 @@ menu() {
 
 		clear
 
-		# Header: title left, hostname right
-		header_line "SSH PLUS MANAGER v${_ver_local}" "${_hostname_short:-$_hostname}"
+		# Header: title left, hostname right (fallback if hostname empty)
+		_header_right="${_hostname_short:-$_hostname}"
+		[[ -z "$_header_right" ]] && _header_right="${HOSTNAME:-—}"
+		header_line "SSH PLUS MANAGER v${_ver_local}" "$_header_right"
 		hr
 		echo ""
 
