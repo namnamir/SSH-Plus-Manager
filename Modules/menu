@@ -386,7 +386,7 @@ menu() {
 		[[ "$x" == "" ]] && continue
 
 		case "$x" in
-		1 | 01) clear; createuser; echo ""; printf "%b%s%b" "$(c ui_warn)" "Press ENTER to return to menu (copy the user info above first)..." "$(reset)"; read -r ;;
+		1 | 01) clear; createuser; _ret=$?; [[ $_ret -eq 99 ]] && exit 0 ;;
 		2 | 02) clear; removeuser; _ret=$?; [[ $_ret -eq 99 ]] && exit 0; sleep 3 ;;
 		3 | 03) clear; changepassword; _ret=$?; [[ $_ret -eq 99 ]] && exit 0; sleep 3 ;;
 		4 | 04) clear; changeexpiration; _ret=$?; [[ $_ret -eq 99 ]] && exit 0; sleep 3 ;;

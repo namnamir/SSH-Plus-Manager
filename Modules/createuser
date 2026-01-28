@@ -44,32 +44,96 @@ _get_ssh_port() {
 	echo "$port"
 }
 
-# Generate npvt-ssh:// import link
-_generate_npvt_link() {
-	local username="$1" password="$2" ssh_host="$3" ssh_port="${4:-22}"
-	[[ -z "$username" || -z "$password" || -z "$ssh_host" ]] && return 1
+# -------------------- npvt-ssh:// helpers --------------------
+_json_escape() {
+	# Minimal JSON string escaping for remarks/host/user/pass fields.
+	# Escapes: backslash, double-quote, newlines, carriage returns, tabs.
+	local s="${1:-}"
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$'\n'/\\n}
+	s=${s//$'\r'/\\r}
+	s=${s//$'\t'/\\t}
+	printf "%s" "$s"
+}
 
-	local hostname_short
-	hostname_short=$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo "server")
-	[[ -z "$hostname_short" ]] && hostname_short="server"
-	local remarks="${username}@${hostname_short}"
+_build_npvt_json() {
+	# Prints single-line JSON exactly (no trailing newline)
+	# Args: remarks host port username password sni tlsVersion dnsTTMode udpgwPort
+	local remarks="$1" ssh_host="$2" ssh_port="$3" username="$4" password="$5"
+	local sni="${6:-}" tlsVersion="${7:-DEFAULT}" dnsTTMode="${8:-UDP}" udpgwPort="${9:-7300}"
 
-	local json
-	json=$(cat <<EOF
-{"sshConfigType":"SSH-Direct","remarks":"${remarks}","sshHost":"${ssh_host}","sshPort":${ssh_port},"sshUsername":"${username}","sshPassword":"${password}","sni":"","tlsVersion":"DEFAULT","httpProxy":"","authenticateProxy":false,"proxyUsername":"","proxyPassword":"","payload":"","dnsTTMode":"UDP","dnsServer":"","nameserver":"","publicKey":"","udpgwPort":7300,"udpgwTransparentDNS":true}
-EOF
-)
+	printf '{"sshConfigType":"SSH-Direct","remarks":"%s","sshHost":"%s","sshPort":%s,"sshUsername":"%s","sshPassword":"%s","sni":"%s","tlsVersion":"%s","httpProxy":"","authenticateProxy":false,"proxyUsername":"","proxyPassword":"","payload":"","dnsTTMode":"%s","dnsServer":"","nameserver":"","publicKey":"","udpgwPort":%s,"udpgwTransparentDNS":true}' \
+		"$(_json_escape "$remarks")" \
+		"$(_json_escape "$ssh_host")" \
+		"${ssh_port:-22}" \
+		"$(_json_escape "$username")" \
+		"$(_json_escape "$password")" \
+		"$(_json_escape "$sni")" \
+		"$(_json_escape "$tlsVersion")" \
+		"$(_json_escape "$dnsTTMode")" \
+		"${udpgwPort:-7300}"
+}
 
-	local encoded
+_b64_encode() {
+	# Base64 encode stdin to single line (no newlines)
 	if command -v base64 >/dev/null 2>&1; then
-		encoded=$(printf "%s" "$json" | base64 -w 0 2>/dev/null || printf "%s" "$json" | base64 2>/dev/null | tr -d '\n')
-	elif command -v openssl >/dev/null 2>&1; then
-		encoded=$(printf "%s" "$json" | openssl base64 2>/dev/null | tr -d '\n')
-	else
-		return 1
+		base64 -w 0 2>/dev/null || base64 2>/dev/null | tr -d '\n'
+		return 0
 	fi
+	if command -v openssl >/dev/null 2>&1; then
+		openssl base64 2>/dev/null | tr -d '\n'
+		return 0
+	fi
+	return 1
+}
 
+_npvt_link_from_json() {
+	local json="${1:-}"
+	[[ -z "$json" ]] && return 1
+	local encoded
+	encoded="$(printf "%s" "$json" | _b64_encode)" || return 1
 	printf "npvt-ssh://%s" "$encoded"
+}
+
+_gen_password() {
+	# Generates a reasonably copy-friendly password (min 8 chars).
+	if command -v openssl >/dev/null 2>&1; then
+		openssl rand -base64 12 2>/dev/null | tr -d '\n' | tr -d '=+/' | cut -c1-12
+		return 0
+	fi
+	tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 12
+}
+
+_is_int() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+
+_detect_public_ipv4() {
+	# Prefer /etc/IP; fallback to hostname -I; fallback to curl/wget
+	local ip=""
+	if [[ -f /etc/IP ]] && [[ -s /etc/IP ]]; then
+		ip=$(tr -d '\r\n' < /etc/IP)
+	fi
+	[[ -z "$ip" ]] && ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+	if [[ -z "$ip" ]] && command -v curl >/dev/null 2>&1; then
+		ip=$(curl -sfL --max-time 3 ipv4.icanhazip.com 2>/dev/null | tr -d '\r\n')
+	fi
+	if [[ -z "$ip" ]] && command -v wget >/dev/null 2>&1; then
+		ip=$(wget -qO- --timeout=3 ipv4.icanhazip.com 2>/dev/null | tr -d '\r\n')
+	fi
+	printf "%s" "$ip"
+}
+
+_hostname_short() {
+	local h
+	h=$(hostname -s 2>/dev/null || hostname 2>/dev/null || true)
+	[[ -z "$h" ]] && h="server"
+	printf "%s" "$h"
+}
+
+_print_kv_aligned() {
+	# Args: label value (label includes emoji)
+	local label="$1" value="$2"
+	printf "%b%-18s%b %b%s%b\n" "$(c ui_label)" "$label" "$(reset)" "$(c ui_value)" "$value" "$(reset)"
 }
 # Legacy ANSI vars (prefer msg_err/banner_info from colors); remove if unused
 cor1='\033[41;1;37m'
@@ -357,105 +421,138 @@ fun_edithost() {
 }
 [[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && exit 0
 clear
-tput setaf 7;tput setab 4;tput bold;printf '%30s%s%-15s\n' "Create SSH User";tput sgr0
-echo ""
-color_echo_n "Enter new username to create user (0=back 00=exit): " "green"
-read -r username
-username="${username//[[:space:]]/}"
-[[ "$username" == "0" ]] && exit 0
-[[ "$username" == "00" ]] && exit 99
-[[ -z "$username" ]] && {
-	echo ""
-	msg_err "Empty or invalid username!"
-	echo ""
-	exit 1
-}
-[[ "$(grep -wc $username /etc/passwd)" != '0' ]] && {
-	echo ""
-	msg_err "This user already exists. try another name!"
-	echo ""
-	exit 1
-}
-[[ ${username} != ?(+|-)+([a-zA-Z0-9]) ]] && {
-	echo ""
-	msg_err "You entered an invalid username!"
-	msg_err "Do not use spaces, accents or special characters!"
-	echo ""
-	exit 1
-}
-sizemin=$(echo ${#username})
-[[ $sizemin -lt 2 ]] && {
-	echo ""
-	msg_err "You entered a very short username"
-	msg_err "use at least two characters!"
-	echo ""
-	exit 1
-}
-sizemax=$(echo ${#username})
-[[ $sizemax -gt 10 ]] && {
-	echo ""
-	msg_err "You entered a very long username"
-	msg_err "use a maximum of 10 characters!"
-	echo ""
-	exit 1
-}
-color_echo_n "Password: " "green"
-read -r password
-[[ -z $password ]] && {
-	echo ""
-	msg_err "Password empty or invalid!"
-	echo ""
-	exit 1
-}
-sizepass=$(echo ${#password})
-[[ $sizepass -lt 4 ]] && {
-	echo ""
-	msg_err "Short password !, use at least 4 characters"
-	echo ""
-	exit 1
-}
-color_echo_n "Days to expire: " "green"
-read -r dias
-[[ -z $dias ]] && {
-	echo ""
-	msg_err "No number of days!"
-	echo ""
-	exit 1
-}
-[[ ${dias} != ?(+|-)+([0-9]) ]] && {
-	echo ""
-	msg_err "You entered an invalid number of days!"
-	echo ""
-	exit 1
-}
-[[ $dias -lt 1 ]] && {
-	echo ""
-	msg_err "The number must be greater than zero!"
-	echo ""
-	exit 1
-}
-color_echo_n "Connection limit: " "green"
-read -r sshlimiter
-[[ -z $sshlimiter ]] && {
-	echo ""
-	msg_err "You left the connection limit empty!"
-	echo ""
-	exit 1
-}
-[[ ${sshlimiter} != ?(+|-)+([0-9]) ]] && {
-	echo ""
-	msg_err "You entered an invalid number of connection!"
-	echo ""
-	exit 1
-}
-[[ $sshlimiter -lt 1 ]] && {
-	echo ""
-	msg_err "Number of simultaneous connections must be greater than zero!"
-	echo ""
-	exit 1
-}
-final=$(date "+%Y-%m-%d" -d "+$dias days")
-gui=$(date "+%d/%m/%Y" -d "+$dias days")
+
+# -------------------- new Create User UX --------------------
+while true; do
+	title_line "CREATE USER"
+
+	# Username
+	printf "%b👤 Username:%b " "$(c ui_label)" "$(reset)"
+	read -r username
+	username="${username//[[:space:]]/}"
+	[[ "$username" == "0" ]] && exit 0
+	[[ "$username" == "00" ]] && exit 99
+	if [[ -z "$username" ]]; then
+		msg_err "Username is required."
+		sleep 1
+		clear
+		continue
+	fi
+	if [[ "$(grep -wc "$username" /etc/passwd 2>/dev/null)" != '0' ]]; then
+		msg_err "This user already exists. Try another name."
+		sleep 1
+		clear
+		continue
+	fi
+	if ! [[ "$username" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{1,9}$ ]]; then
+		msg_err "Invalid username. Use 2-10 chars: letters/numbers/_/-"
+		sleep 1
+		clear
+		continue
+	fi
+
+	# Defaults derived after username
+	_default_host="$(_detect_public_ipv4)"
+	_default_port="$(_get_ssh_port)"
+	_default_remark="${username}@${_hostname_short}"
+	_default_days="98"
+	_default_limit="2"
+
+	# Password
+	printf "%b🔒 Password:%b %b[auto]%b  (Enter to generate)\n" "$(c ui_label)" "$(reset)" "$(c muted)" "$(reset)"
+	printf "%b> %b" "$(c ui_prompt)" "$(reset)"
+	read -r password
+	if [[ -z "$password" ]]; then
+		password="$(_gen_password)"
+	fi
+	if [[ ${#password} -lt 4 ]]; then
+		msg_err "Password too short (min 4)."
+		sleep 1
+		clear
+		continue
+	fi
+
+	# Remark
+	printf "%b🏷 Remark:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_remark"
+	read -r remarks
+	[[ -z "$remarks" ]] && remarks="$_default_remark"
+
+	# Host / port
+	printf "%b🌍 SSH Host:%b [%s] " "$(c ui_label)" "$(reset)" "${_default_host:-}"
+	read -r ssh_host
+	[[ -z "$ssh_host" ]] && ssh_host="$_default_host"
+	[[ -z "$ssh_host" ]] && ssh_host="N/A"
+
+	printf "%b🔌 SSH Port:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_port"
+	read -r ssh_port
+	[[ -z "$ssh_port" ]] && ssh_port="$_default_port"
+	if ! _is_int "$ssh_port" || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
+		msg_err "Invalid port."
+		sleep 1
+		clear
+		continue
+	fi
+
+	# Expiration + limit
+	printf "%b⏳ Expiration (days):%b [%s] " "$(c ui_label)" "$(reset)" "$_default_days"
+	read -r dias
+	[[ -z "$dias" ]] && dias="$_default_days"
+	if ! _is_int "$dias" || [[ "$dias" -lt 1 ]]; then
+		msg_err "Expiration days must be a positive number."
+		sleep 1
+		clear
+		continue
+	fi
+
+	printf "%b🔗 Connection limit:%b [%s] " "$(c ui_label)" "$(reset)" "$_default_limit"
+	read -r sshlimiter
+	[[ -z "$sshlimiter" ]] && sshlimiter="$_default_limit"
+	if ! _is_int "$sshlimiter" || [[ "$sshlimiter" -lt 1 ]]; then
+		msg_err "Connection limit must be a positive number."
+		sleep 1
+		clear
+		continue
+	fi
+
+	# Advanced options (optional)
+	sni=""
+	udpgwPort="7300"
+	dnsTTMode="UDP"
+	tlsVersion="DEFAULT"
+	printf "\n%bAdvanced options:%b [Enter] skip   [a] edit advanced\n" "$(c ui_label)" "$(reset)"
+	read -r adv
+	if [[ "${adv:-}" =~ ^[Aa]$ ]]; then
+		title_line "ADVANCED OPTIONS"
+		printf "%bSNI:%b [%s] " "$(c ui_label)" "$(reset)" ""
+		read -r sni
+		printf "%bUDP GW Port:%b [%s] " "$(c ui_label)" "$(reset)" "$udpgwPort"
+		read -r _p
+		[[ -n "$_p" ]] && udpgwPort="$_p"
+		printf "%bDNS mode (UDP/TCP/DOH):%b [%s] " "$(c ui_label)" "$(reset)" "$dnsTTMode"
+		read -r _d
+		[[ -n "$_d" ]] && dnsTTMode="$_d"
+		printf "%bTLS version:%b [%s] " "$(c ui_label)" "$(reset)" "$tlsVersion"
+		read -r _t
+		[[ -n "$_t" ]] && tlsVersion="$_t"
+	fi
+
+	# Confirm summary
+	final=$(date "+%Y-%m-%d" -d "+$dias days" 2>/dev/null)
+	gui=$(date "+%d/%m/%Y" -d "+$dias days" 2>/dev/null)
+	[[ -z "$final" ]] && final="never"
+	[[ -z "$gui" ]] && gui="$final"
+
+	hr
+	printf "%bProceed? [Y/n]:%b " "$(c ui_prompt)" "$(reset)"
+	read -r proceed
+	[[ -z "$proceed" ]] && proceed="Y"
+	if [[ "$proceed" =~ ^[Nn]$ ]]; then
+		exit 0
+	fi
+
+	break
+done
+
 # Create system user, then set password through the service (no `passwd` usage)
 useradd -e "$final" -M -s /bin/false "$username" >/dev/null 2>&1 || {
 	echo ""
@@ -482,6 +579,76 @@ sshplus_with_db_lock sshplus_db_put_user \
 	0 \
 	"never" \
 	"$(sshplus_hash_password "$password")" || true
+
+# Build JSON + link (must show on result page)
+config_json="$(_build_npvt_json "$remarks" "$ssh_host" "$ssh_port" "$username" "$password" "$sni" "$tlsVersion" "$dnsTTMode" "$udpgwPort")"
+import_link="$(_npvt_link_from_json "$config_json" 2>/dev/null || true)"
+
+# Result screen (copy-friendly)
+clear
+title_line "SSH ACCOUNT CREATED"
+echo ""
+_print_kv_aligned "🌍 Host:" "$ssh_host"
+_print_kv_aligned "🔌 Port:" "$ssh_port"
+_print_kv_aligned "👤 Username:" "$username"
+_print_kv_aligned "🔒 Password:" "$password"
+_print_kv_aligned "🏷 Remark:" "$remarks"
+_print_kv_aligned "⏳ Expires in:" "${gui} (${dias}d)"
+_print_kv_aligned "🔗 Conn limit:" "$sshlimiter"
+
+echo ""
+printf "%bImport link:%b\n" "$(c ui_label)" "$(reset)"
+if [[ -n "${import_link:-}" ]]; then
+	printf "%s\n" "$import_link"
+else
+	msg_warn "Could not generate import link (missing base64/openssl)."
+fi
+
+echo ""
+printf "%bConfig JSON:%b\n" "$(c ui_label)" "$(reset)"
+printf "%s\n" "$config_json"
+
+if [[ -e /etc/openvpn/server.conf ]]; then
+	printf "\n%b📦 Generate OpenVPN file now? [y/N]:%b " "$(c ui_prompt)" "$(reset)"
+	read -r _gen_ovpn || _gen_ovpn=""
+	[[ -z "$_gen_ovpn" ]] && _gen_ovpn="N"
+	if [[ "$_gen_ovpn" =~ ^[Yy]$ ]]; then
+		printf "%bEmbedding username/password in .ovpn? [y/N]:%b " "$(c ui_prompt)" "$(reset)"
+		read -r _embed || _embed=""
+		[[ -z "$_embed" ]] && _embed="N"
+
+		# Build client cert and generate client file
+		if [[ -d /etc/openvpn/easy-rsa ]]; then
+			(
+				cd /etc/openvpn/easy-rsa/ || exit 1
+				./easyrsa build-client-full "$username" nopass
+			) >/dev/null 2>&1 || msg_warn "OpenVPN client cert generation failed."
+		fi
+		newclient "$username" >/dev/null 2>&1 || msg_warn "OpenVPN profile generation failed."
+
+		if [[ "$_embed" =~ ^[Yy]$ ]] && [[ -f "/root/${username}.ovpn" ]]; then
+			sed -e "s;auth-user-pass;<auth-user-pass>\n${username}\n${password}\n</auth-user-pass>;g" "/root/${username}.ovpn" >"/root/tmp.ovpn" 2>/dev/null && mv -f "/root/tmp.ovpn" "/root/${username}.ovpn"
+		fi
+
+		if command -v zip >/dev/null 2>&1 && [[ -f "/root/${username}.ovpn" ]]; then
+			rm -f "/root/${username}.zip" 2>/dev/null || true
+			zip -j "/root/${username}.zip" "/root/${username}.ovpn" >/dev/null 2>&1 || true
+			if [[ -d /var/www/html/openvpn ]]; then
+				mv -f "/root/${username}.zip" "/var/www/html/openvpn/${username}.zip" >/dev/null 2>&1 || true
+				msg_ok "OpenVPN file: /var/www/html/openvpn/${username}.zip"
+			else
+				msg_ok "OpenVPN file: /root/${username}.zip"
+			fi
+		else
+			msg_warn "zip not found or .ovpn missing; OpenVPN bundle not created."
+		fi
+	fi
+fi
+
+hr
+printf "%bPress Enter to return to menu…%b" "$(c ui_prompt)" "$(reset)"
+read -r _
+exit 0
 [[ -e /etc/openvpn/server.conf ]] && {
 	color_echo_n "Generate Ovpn File " "green"
 	color_echo_n "? " "red"
