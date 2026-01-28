@@ -104,7 +104,7 @@ ensure_fetch_deps() {
 
 # Main menu function
 # Layout: header_line (title + hostname), hr, 3 info rows (CPU/RAM/Disk | traffic; IP | uptime; ports | users),
-# optional update line, hr, sections USERS/MONITORING/SYSTEM/SETTINGS with menu_option/menu_option_tag,
+# optional update line, hr, sections USERS/MONITORING/SYSTEM/SETTINGS with menu_option/menu_option_n,
 # [00/q/Q] Quit, hr, prompt. Refresh every 10s (read -t 10); numbering [01]-[19] maps to actions below.
 menu() {
 	while true; do
@@ -304,16 +304,16 @@ menu() {
 		echo ""
 
 		# Row 1: CPU / RAM / Disk % (colored by threshold) | sys traffic; left pad to 52 bytes
-		_left1_len=$(( 7 + ${#_cpu_pct} + 3 + 7 + ${#_ram_pct} + 3 + 8 + ${#_disk_pct} + 1 ))
+		_left1_len=$(( 15 + ${#_cpu_pct} + ${#_ram_pct} + ${#_disk_pct} ))
 		_pad1=$(( 52 - _left1_len )); [[ $_pad1 -lt 1 ]] && _pad1=1
-		_right1="🛜 ${_sys_traffic_str}"
-		printf "%b🧠 CPU %b%s%%%b  %b🧩 RAM %b%s%%%b  %b💾 DISK %b%s%%%b%*s%b%s%b\n" \
+		_right1="📶 ${_sys_traffic_str}"
+		printf "%b🧠 %b%s%%%b  %b🧩 %b%s%%%b  %b💾 %b%s%%%b%*s%b%s%b\n" \
 			"$(c ui_value)" "$(_pct_style "$_cpu_pct")" "$_cpu_pct" "$(reset)" \
 			"$(c ui_value)" "$(_pct_style "$_ram_pct")" "$_ram_pct" "$(reset)" \
 			"$(c ui_value)" "$(_pct_style "$_disk_pct")" "$_disk_pct" "$(reset)" \
 			"$_pad1" "" "$(c ui_value)" "$_right1" "$(reset)"
 		# Row 2: IP | uptime
-		_left2="🌍 ${_ipv4}  |  IPv6 ${_ipv6}"
+		_left2="🌍 ${_ipv4}  |  ${_ipv6}"
 		_right2="⏱ ${_uptime_short}"
 		_info_row "$_left2" "$_right2"
 		# Row 3: ports | users (● active ● inactive)
@@ -352,7 +352,7 @@ menu() {
 		menu_option 12 "Reboot system"
 		menu_option_n 13 "Root password"
 		printf "               "
-		menu_option_tag 14 "Remove script" "DANGER" ui_danger
+		menu_option_n 14 "⚠️ Remove script ⚠️"
 
 		section "SETTINGS"
 		menu_option_n 15 "Connections"
