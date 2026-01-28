@@ -8,7 +8,9 @@ if [[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]]; then
 	export SSHPLUS_FROM_REPO=1
 fi
 
-# Load color helpers: when running from repo, use repo's colors; otherwise installed paths
+# Load color helpers: when running from repo, use repo's colors (so colors actually show);
+# otherwise installed paths. If you see no colors, run from repo: PATH="$(pwd)/Modules:$PATH" bash Modules/menu
+# or refresh installed copy with [19] Update script.
 if [[ -n "${SSHPLUS_FROM_REPO:-}" ]] && [[ -f "${_mod_dir}/colors" ]]; then
 	source "${_mod_dir}/colors"
 elif [[ -f /etc/SSHPlus/colors ]]; then
@@ -265,10 +267,10 @@ menu() {
 			[[ "$n" -ge 85 ]] 2>/dev/null && { printf "%b" "$(c warn)"; return; }
 			printf "%b" "$(c ui_value)"
 		}
-		# Info row: left (padded to 44), right
+		# Info row: left padded to 52 bytes so right column aligns at ~80 cols
 		_info_row() {
 			local left="$1" right="$2"
-			printf "%b%-44s%b%b%s%b\n" "$(c ui_value)" "$left" "$(reset)" "$(c ui_value)" "$right" "$(reset)"
+			printf "%b%-52s%b%b%s%b\n" "$(c ui_value)" "$left" "$(reset)" "$(c ui_value)" "$right" "$(reset)"
 		}
 
 		clear
@@ -278,9 +280,9 @@ menu() {
 		hr
 		echo ""
 
-		# Row 1: CPU / RAM / Disk % (colored by threshold) | sys traffic; left pad to 44 visible cols
-		_left1_len=$(( 7 + ${#_cpu_pct} + 4 + 9 + ${#_ram_pct} + 4 + 10 + ${#_disk_pct} + 1 ))
-		_pad1=$(( 44 - _left1_len )); [[ $_pad1 -lt 1 ]] && _pad1=1
+		# Row 1: CPU / RAM / Disk % (colored by threshold) | sys traffic; left pad to 52 bytes
+		_left1_len=$(( 7 + ${#_cpu_pct} + 3 + 7 + ${#_ram_pct} + 3 + 8 + ${#_disk_pct} + 1 ))
+		_pad1=$(( 52 - _left1_len )); [[ $_pad1 -lt 1 ]] && _pad1=1
 		_right1="🛜 ${_sys_traffic_str}"
 		printf "%b🧠 CPU %b%s%%%b  %b🧩 RAM %b%s%%%b  %b💾 DISK %b%s%%%b%*s%b%s%b\n" \
 			"$(c ui_value)" "$(_pct_style "$_cpu_pct")" "$_cpu_pct" "$(reset)" \
@@ -303,44 +305,40 @@ menu() {
 		hr
 		# section() adds leading newline
 		section "USERS"
-		menu_option 1 "Create user"
+		menu_option_n 1 "Create user"
 		printf "                 "
 		menu_option 2 "Remove user"
-		menu_option 3 "Change password"
+		menu_option_n 3 "Change password"
 		printf "             "
 		menu_option 4 "Set expiration"
-		menu_option 5 "Account limit"
+		menu_option_n 5 "Account limit"
 		printf "               "
 		menu_option 6 "Expired users"
-		echo ""
 
 		section "MONITORING"
-		menu_option 7 "Monitor users"
+		menu_option_n 7 "Monitor users"
 		printf "               "
 		menu_option 8 "Speedtest"
-		menu_option 9 "VPS traffic"
+		menu_option_n 9 "VPS traffic"
 		printf "                 "
 		menu_option 10 "VPS info"
-		echo ""
 
 		section "SYSTEM"
-		menu_option 11 "Restart services"
+		menu_option_n 11 "Restart services"
 		printf "            "
 		menu_option 12 "Reboot system"
-		menu_option 13 "Root password"
+		menu_option_n 13 "Root password"
 		printf "               "
 		menu_option_tag 14 "Remove script" "DANGER" ui_danger
-		echo ""
 
 		section "SETTINGS"
-		menu_option 15 "Connections"
+		menu_option_n 15 "Connections"
 		printf "                 "
 		menu_option 16 "Banner"
-		menu_option 17 "Backup"
+		menu_option_n 17 "Backup"
 		printf "                      "
 		menu_option 18 "Autorun"
 		menu_option 19 "Update script"
-		echo ""
 
 		printf "%b[00/q/Q] Quit%b\n" "$(c ui_menu_num)" "$(reset)"
 		hr

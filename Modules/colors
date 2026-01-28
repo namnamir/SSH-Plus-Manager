@@ -168,7 +168,7 @@ repeat_char() {
 
 # -------------------- primitives --------------------
 hr() {
-  local ch="${1:-─}" cols
+  local ch="${1:--}" cols
   cols="$(term_cols)"
   if _no_color; then
     repeat_char "-" "$cols"; printf "\n"; return 0
@@ -235,11 +235,17 @@ menu_option() {
   printf "%b[%02d]%b %b%s%b\n" "$(c ui_menu_num)" "$n" "$(reset)" "$(c ui_menu_txt)" "$text" "$(reset)"
 }
 
+# Same as menu_option but no trailing newline (for two-column layout)
+menu_option_n() {
+  local n="$1" text="$2"
+  printf "%b[%02d]%b %b%s%b" "$(c ui_menu_num)" "$n" "$(reset)" "$(c ui_menu_txt)" "$text" "$(reset)"
+}
+
 menu_option_tag() {
   # menu_option_tag 19 "Remove script" "DANGER" ui_danger
   local n="$1" text="$2" tag="${3:-}" tag_style="${4:-ui_info}"
   if [[ -n "$tag" ]]; then
-    printf "%b[%02d]%b %b%-24s%b %b%s%b\n" \
+    printf "%b[%02d]%b %b%-24s%b %b[%s]%b\n" \
       "$(c ui_menu_num)" "$n" "$(reset)" \
       "$(c ui_menu_txt)" "$text" "$(reset)" \
       "$(c "$tag_style")" "$tag" "$(reset)"
