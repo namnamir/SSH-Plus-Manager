@@ -17,12 +17,11 @@ fi
 _is_tty() { [[ -t 1 ]]; }
 
 # Only disable color when explicitly requested (NO_COLOR) or TERM=dumb.
-# Do not require a TTY or non-empty TERM; many SSH/screen sessions still support color.
+# Do NOT require TTY or non-empty TERM — SSH, pipes, and many terminals still support color.
 _no_color() {
   [[ -n "${NO_COLOR:-}" ]] && return 0
-  [[ "${TERM:-}" == "dumb" || -z "${TERM:-}" ]] && return 0
+  [[ "${TERM:-}" == "dumb" ]] && return 0
   [[ -n "${FORCE_COLOR:-}" ]] && return 1
-  _is_tty || return 0
   return 1
 }
 

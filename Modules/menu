@@ -8,17 +8,15 @@ if [[ -f "${_repo_root}/install.sh" ]] && [[ -f "${_repo_root}/version" ]]; then
 	export SSHPLUS_FROM_REPO=1
 fi
 
-# Load color helpers: when running from repo, use repo's colors (so colors actually show);
-# otherwise installed paths. If you see no colors, run from repo: PATH="$(pwd)/Modules:$PATH" bash Modules/menu
-# or refresh installed copy with [19] Update script.
-if [[ -n "${SSHPLUS_FROM_REPO:-}" ]] && [[ -f "${_mod_dir}/colors" ]]; then
+# Load color helpers: always prefer colors from the same directory as this script
+# (so "bash Modules/menu" or "bash /path/to/SSH-Plus-Manager/Modules/menu" use Modules/colors).
+# Then fall back to installed paths. For no colors, run [19] Update script to refresh installed copy.
+if [[ -f "${_mod_dir}/colors" ]]; then
 	source "${_mod_dir}/colors"
 elif [[ -f /etc/SSHPlus/colors ]]; then
 	source /etc/SSHPlus/colors
 elif [[ -f /bin/colors ]]; then
 	source /bin/colors
-elif [[ -f "${_mod_dir}/colors" ]]; then
-	source "${_mod_dir}/colors"
 fi
 unset -v _mod_dir _repo_root
 
