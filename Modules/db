@@ -51,11 +51,22 @@ sshplus_is_iso_or_never() {
 }
 
 sshplus_db_init() {
-  local db log header
+  local db log header firstline tmp
   db="$(sshplus_users_db_path)"
   log="$(sshplus_sessions_log_path)"
   header="# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password"
-  [[ -f "$db" ]] || { mkdir -p "$(dirname "$db")" 2>/dev/null || true; printf '%s\n' "$header" > "$db"; chmod 600 "$db" 2>/dev/null || true; }
+  if [[ -f "$db" ]]; then
+    # Ensure header line exists (for existing DBs created without one)
+    firstline=$(head -1 "$db" 2>/dev/null)
+    if [[ -n "$firstline" && "${firstline:0:1}" != "#" ]]; then
+      tmp="$(mktemp "${db}.header.XXXXXX" 2>/dev/null || echo "${db}.header.$$")"
+      { printf '%s\n' "$header"; cat "$db"; } > "$tmp" 2>/dev/null && mv -f "$tmp" "$db" 2>/dev/null || true
+    fi
+  else
+    mkdir -p "$(dirname "$db")" 2>/dev/null || true
+    printf '%s\n' "$header" > "$db"
+    chmod 600 "$db" 2>/dev/null || true
+  fi
   [[ -f "$log" ]] || { mkdir -p "$(dirname "$log")" 2>/dev/null || true; : > "$log"; chmod 600 "$log" 2>/dev/null || true; }
 }
 
@@ -212,6 +223,18 @@ sshplus_db_add_traffic() {
   read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
   tot=$(( ${tot:-0} + ${delta_bytes:-0} ))
   sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$session_bytes" "$latest" "$pass"
+}
+
+# Set only latest_connection_date (e.g. when session ends so "last seen" is correct)
+sshplus_db_set_latest_connection() {
+  local u="${1:-}" latest_iso="${2:-}" line
+  sshplus_is_iso_or_never "$latest_iso" || return 1
+  sshplus_db_ensure_user "$u" || true
+  line="$(sshplus_db_get_line "$u")"
+  [[ -z "$line" ]] && return 1
+  local _u lim exp reg tot last latest pass
+  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest_iso" "$pass"
 }
 
 # -------------------- password sync --------------------

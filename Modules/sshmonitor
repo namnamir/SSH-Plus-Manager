@@ -126,6 +126,7 @@ parse_users_db() {
 
 # -------------------- Live connections (not stored in db) --------------------
 # Per user: now_conn_count, now_down, now_up, now_time (sum of session times), and per-connection lines.
+# Uses same PID list for count and traffic so "now online" and "current traffic" stay in sync.
 # Sets: _L_conn_count, _L_now_down, _L_now_up, _L_now_time_sec, _L_connections (newline-sep lines "slot|down|up|time_sec")
 get_live_connections() {
 	local u
@@ -140,12 +141,15 @@ get_live_connections() {
 		_L_now_time_sec["$u"]=0
 		_L_connections["$u"]=""
 
-		# SSH sessions: unique ttys for this user
-		local sqd=0 ovp=0 pids pid r w etime_sec line
-		sqd=$(ps -u "$u" -o tty=,comm= 2>/dev/null | awk '$2~/sshd/ && $1!~/^\?/ {print $1}' | sort -u | wc -l)
-		sqd=${sqd//[!0-9]/}; sqd=${sqd:-0}
+		# SSH sessions: get PIDs of user's sshd processes first, then use for both count and traffic
+		local ssh_pids ovp=0 pid r w etime_sec line
+		ssh_pids=$(ps -u "$u" -o pid= 2>/dev/null | while read -r p; do
+			[[ -n "$p" ]] && ps -p "$p" -o comm= 2>/dev/null | grep -q sshd && echo "$p"
+		done)
 		[[ -e /etc/openvpn/openvpn-status.log ]] && ovp=$(grep -E ,"$u", /etc/openvpn/openvpn-status.log 2>/dev/null | wc -l)
 		ovp=${ovp//[!0-9]/}; ovp=${ovp:-0}
+		local sqd=0
+		while read -r pid; do [[ -n "$pid" ]] && ((sqd++)) || true; done <<<"$ssh_pids"
 		local total_conn=$((sqd + ovp))
 		_L_conn_count["$u"]=$total_conn
 
@@ -164,9 +168,7 @@ get_live_connections() {
 				((idx++)) || true
 				sum_down=$((sum_down + r)); sum_up=$((sum_up + w)); sum_time=$((sum_time + etime_sec))
 				conn_lines+="${idx}|${r}|${w}|${etime_sec}"$'\n'
-			done < <(ps -u "$u" -o pid= 2>/dev/null | while read -r p; do
-				ps -p "$p" -o comm= 2>/dev/null | grep -q sshd && echo "$p"
-			done)
+			done <<<"$ssh_pids"
 			_L_now_down["$u"]=$sum_down
 			_L_now_up["$u"]=$sum_up
 			_L_now_time_sec["$u"]=$sum_time
@@ -257,7 +259,7 @@ MONITOR_FILTER=1
 declare -A MONITOR_EXPANDED
 
 # Session logging state (per-user, for this sshmonitor run only)
-declare -A _S_ACTIVE _S_START_TS _S_START_ISO _S_BYTES_START
+declare -A _S_ACTIVE _S_START_TS _S_START_ISO _S_BYTES_START _S_BYTES_END
 
 # Sort labels for header
 _sort_label() {
@@ -288,39 +290,46 @@ _sec_to_hms() {
 	}'
 }
 
-# -------------------- Session logging (writes sessions.log) --------------------
+# -------------------- Session logging (writes sessions.log, updates users.db) --------------------
 _update_session_logs() {
 	# Requires: _U_LIST, _L_conn_count, _L_now_down, _L_now_up
-	# Uses sshplus_log_session from Modules/db if available.
+	# On session start: updates DB latest_connection_date (last seen). On session end: logs session, adds traffic to DB, updates last seen.
 	type sshplus_log_session >/dev/null 2>&1 || return 0
-	local u now_count now_bytes start_ts end_ts delta_sec delta_hms bytes_sess
+	local u now_count now_bytes start_ts end_ts delta_sec delta_hms bytes_sess end_iso
 	for u in "${_U_LIST[@]:-}"; do
 		[[ -z "$u" ]] && continue
 		now_count="${_L_conn_count[$u]:-0}"
 		now_bytes=$(( ${_L_now_down[$u]:-0} + ${_L_now_up[$u]:-0} ))
 
 		if [[ "$now_count" -gt 0 ]]; then
-			# Session active
+			# Session active: keep updating end bytes so we have accurate total when they disconnect
 			if [[ -z "${_S_ACTIVE[$u]:-}" ]]; then
 				_S_ACTIVE["$u"]=1
 				_S_START_TS["$u"]=$(date +%s)
 				_S_START_ISO["$u"]=$(sshplus_now_iso)
 				_S_BYTES_START["$u"]="$now_bytes"
+				# Persist "session start" so last seen and DB are correct
+				sshplus_with_db_lock sshplus_db_start_session "$u" "$(sshplus_now_iso)" >/dev/null 2>&1 || true
 			fi
+			_S_BYTES_END["$u"]="$now_bytes"
 		else
 			# No active connections; if we had an active session, close and log it
 			if [[ -n "${_S_ACTIVE[$u]:-}" ]]; then
 				start_ts="${_S_START_TS[$u]:-0}"
 				[[ -z "$start_ts" ]] && start_ts=0
 				end_ts=$(date +%s)
+				end_iso=$(sshplus_now_iso)
 				delta_sec=$(( end_ts - start_ts ))
 				(( delta_sec < 0 )) && delta_sec=0
 				delta_hms=$(_sec_to_hms "$delta_sec")
-				bytes_sess=$(( now_bytes - ${_S_BYTES_START[$u]:-0} ))
+				# Session bytes: use last stored end bytes (from previous refresh when still connected)
+				bytes_sess=$(( ${_S_BYTES_END[$u]:-0} - ${_S_BYTES_START[$u]:-0} ))
 				(( bytes_sess < 0 )) && bytes_sess=0
-				# IP/banner may be unknown here; sshplus_log_session will apply privacy rules.
-				sshplus_log_session "${_S_START_ISO[$u]:-$(sshplus_now_iso)}" "$(sshplus_now_iso)" "$delta_hms" "$u" "unknown" "unknown" "$bytes_sess" >/dev/null 2>&1 || true
-				unset _S_ACTIVE["$u"] _S_START_TS["$u"] _S_START_ISO["$u"] _S_BYTES_START["$u"]
+				sshplus_log_session "${_S_START_ISO[$u]:-$(sshplus_now_iso)}" "$end_iso" "$delta_hms" "$u" "unknown" "unknown" "$bytes_sess" >/dev/null 2>&1 || true
+				# Update total traffic and last seen in DB
+				sshplus_with_db_lock sshplus_db_add_traffic "$u" "$bytes_sess" "$bytes_sess" >/dev/null 2>&1 || true
+				sshplus_with_db_lock sshplus_db_set_latest_connection "$u" "$end_iso" >/dev/null 2>&1 || true
+				unset _S_ACTIVE["$u"] _S_START_TS["$u"] _S_START_ISO["$u"] _S_BYTES_START["$u"] _S_BYTES_END["$u"]
 			fi
 		fi
 	done
@@ -356,17 +365,19 @@ print_user_monitor_screen() {
 	local sep
 	sep=$(printf '%*s' "$cols" "" | tr ' ' '─')
 
-	# Title (show configured refresh interval)
-	local refresh_interval
+	# Title (show current time and configured refresh interval)
+	local refresh_interval now_str
 	refresh_interval=$(get_refresh_interval)
+	now_str=$(date +"%Y-%m-%d %H:%M:%S" 2>/dev/null || date 2>/dev/null)
 	printf "%bUSERS MONITORING%b%*s%bauto-refresh: %ds%b\n" "$(c ui_title)" "$(reset)" "$(( cols - 28 ))" "" "$(c ui_value)" "$refresh_interval" "$(reset)"
+	printf "%bCurrent time: %s%b\n" "$(c ui_muted)" "$now_str" "$(reset)"
 	printf "%b%s%b\n" "$(c ui_frame)" "$sep" "$(reset)"
 	echo ""
 
-	# Summary
-	printf "👤 %d users    🟢 %d active   🟡 %d idle   🔴 %d inactive   ⚪ %d never\n" "$total_users" "$n_active" "$n_idle" "$n_inactive" "$n_never"
-	printf "🛜 Total traffic   ⬇ %s   ⬆ %s            Sort: %s   Filter: %s\n" \
-		"$(fmt_bytes_compact "$sum_traffic")" "-" "$(_sort_label "$MONITOR_SORT")" "$(_filter_label "$MONITOR_FILTER")"
+	# Summary (total traffic = sum of all users' total_traffic from DB, updated when sessions end)
+	printf "👤 %d users    🟢 %d online   🟡 %d idle   🔴 %d inactive   ⚪ %d never\n" "$total_users" "$n_active" "$n_idle" "$n_inactive" "$n_never"
+	printf "🛜 Total traffic (all users): %s            Sort: %s   Filter: %s\n" \
+		"$(fmt_bytes_compact "$sum_traffic")" "$(_sort_label "$MONITOR_SORT")" "$(_filter_label "$MONITOR_FILTER")"
 	echo ""
 
 	# Expired warning
