@@ -111,10 +111,26 @@ ensure_fetch_deps() {
 	apt-get install -y wget curl &>/dev/null && echo "Installed missing tools ($need) for IP/version checks." >&2
 }
 
+# -------------------- Configuration: Refresh interval --------------------
+# Read refresh interval from config file, default to 30 seconds
+get_refresh_interval() {
+	local config_file="/etc/SSHPlus/refresh_interval"
+	local default_interval=30
+	if [[ -f "$config_file" ]] && [[ -s "$config_file" ]]; then
+		local interval
+		interval=$(tr -d '\r\n' < "$config_file" 2>/dev/null | grep -E '^[0-9]+$' | head -1)
+		if [[ -n "$interval" ]] && [[ "$interval" -ge 5 ]] && [[ "$interval" -le 300 ]]; then
+			echo "$interval"
+			return
+		fi
+	fi
+	echo "$default_interval"
+}
+
 # Main menu function
 # Layout: header_line (title + hostname), hr, 3 info rows (CPU/RAM/Disk | traffic; IP | uptime; ports | users),
 # optional update line, hr, sections USERS/MONITORING/SYSTEM/SETTINGS with menu_option/menu_option_n,
-# [00/q/Q] Quit, hr, prompt. Refresh every 10s (read -t 10); numbering [01]-[19] maps to actions below.
+# [00/q/Q] Quit, hr, prompt. Refresh every Ns (configurable, default 30s); numbering [01]-[19] maps to actions below.
 menu() {
 	while true; do
 		# Detect operating system version
@@ -382,7 +398,9 @@ menu() {
 		hr
 		echo ""
 		prompt "Select option: "
-		read -t 10 -r x || x=""
+		local refresh_interval
+		refresh_interval=$(get_refresh_interval)
+		read -t "$refresh_interval" -r x || x=""
 		[[ "$x" == "" ]] && continue
 
 		case "$x" in

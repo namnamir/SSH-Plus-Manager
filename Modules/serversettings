@@ -237,6 +237,43 @@ configure_privacy_logging() {
 	sleep 2
 }
 
+configure_refresh_interval() {
+	clear
+	banner_info "      AUTO-REFRESH INTERVAL            "
+	echo ""
+	local config_file="/etc/SSHPlus/refresh_interval"
+	local current_interval=30
+	if [[ -f "$config_file" ]] && [[ -s "$config_file" ]]; then
+		local interval
+		interval=$(tr -d '\r\n' < "$config_file" 2>/dev/null | grep -E '^[0-9]+$' | head -1)
+		[[ -n "$interval" ]] && [[ "$interval" -ge 5 ]] && [[ "$interval" -le 300 ]] && current_interval="$interval"
+	fi
+	color_echo "Current refresh interval: ${current_interval} seconds" "cyan"
+	echo ""
+	color_echo "This controls how often the main menu and user monitor screen auto-refresh." "white"
+	color_echo "Lower values (5-15s) provide more frequent updates but increase CPU usage." "white"
+	color_echo "Higher values (30-60s) reduce load but updates are less frequent." "white"
+	echo ""
+	color_echo_n "Enter refresh interval in seconds [5-300, default: 30]: " "yellow"
+	read -r new_interval
+	# Validate input
+	if [[ -z "$new_interval" ]]; then
+		new_interval=30
+	elif ! [[ "$new_interval" =~ ^[0-9]+$ ]]; then
+		msg_err "Invalid input. Must be a number between 5 and 300."
+		sleep 2
+		return 1
+	elif [[ "$new_interval" -lt 5 ]] || [[ "$new_interval" -gt 300 ]]; then
+		msg_err "Interval must be between 5 and 300 seconds."
+		sleep 2
+		return 1
+	fi
+	mkdir -p /etc/SSHPlus 2>/dev/null || true
+	printf '%s\n' "$new_interval" > "$config_file" 2>/dev/null || true
+	msg_ok "Refresh interval set to ${new_interval} seconds. Changes take effect immediately."
+	sleep 2
+}
+
 while true; do
 	clear
 	banner_info "             SERVER SETTINGS           "
@@ -246,6 +283,7 @@ while true; do
 	menu_option 3 "Keyboard layout"
 	menu_option 4 "Server name"
 	menu_option 5 "Privacy (IP & banner logging)"
+	menu_option_n 6 "Auto-refresh interval"
 	menu_option 0 "Back"
 	menu_option 00 "Exit"
 	echo ""
@@ -257,6 +295,7 @@ while true; do
 		3) change_keyboard_layout ;;
 		4) change_server_name ;;
 		5) configure_privacy_logging ;;
+		6) configure_refresh_interval ;;
 		0) exit 0 ;;
 		00) exit 99 ;;
 		*) msg_err "Invalid option!"; sleep 2 ;;
