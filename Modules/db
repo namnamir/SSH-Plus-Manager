@@ -13,13 +13,15 @@
 #   2 connection_limit        - max concurrent connections (number)
 #   3 expiration_date         - account expiry (YYYY-MM-DD or "never")
 #   4 registration_date       - when user was created (YYYY-MM-DD)
-#   5 total_traffic_upload    - cumulative upload bytes across all sessions
-#   6 total_traffic_download  - cumulative download bytes across all sessions
+#   5 total_traffic_upload    - cumulative upload bytes across all sessions (updated on disconnect via update_user_usage_db)
+#   6 total_traffic_download  - cumulative download bytes across all sessions (updated on disconnect)
 #   7 last_connection_traffic - upload+download bytes for the just-ended session
 #   8 latest_connection_date  - when user disconnected (ISO-8601 or "never")
 #   9 password                - plain text; rest of line after field 8 (may contain spaces, e.g. "(not set)")
 #
 # Notes:
+# - Fields 5–7 are updated when a user disconnects and the monitor (or caller) runs update_user_usage_db with session bytes.
+# - Traffic comes from the monitor's /proc/<pid>/io (rchar/wchar) for sshd processes; keep the monitor open when users disconnect.
 # - Password is the LAST field: "rest of line after the 8th field" so spaces/parentheses are preserved.
 # - Restrict file permissions (chmod 600). System password is set via `chpasswd` (non-interactive).
 # - Updates are atomic (tmp + mv) and guarded by a lock (flock if available; mkdir-lock fallback).

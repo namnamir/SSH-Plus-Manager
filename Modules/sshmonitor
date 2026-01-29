@@ -161,7 +161,10 @@ get_live_connections() {
 				[[ -z "$pid" ]] && continue
 				r=0 w=0
 				[[ -r "/proc/$pid/io" ]] && while read -r line; do
-					case "$line" in rchar:*) r="${line#rchar:}";; wchar:*) w="${line#wchar:}";; esac
+					case "$line" in
+						rchar:*) r="${line#rchar:}"; r="${r//[[:space:]]/}"; [[ -z "$r" ]] && r=0 ;;
+						wchar:*) w="${line#wchar:}"; w="${w//[[:space:]]/}"; [[ -z "$w" ]] && w=0 ;;
+					esac
 				done < "/proc/$pid/io" 2>/dev/null
 				etime_sec=0
 				local et
@@ -333,6 +336,10 @@ _update_session_logs() {
 				session_download=$(( ${_S_BYTES_END_DOWN[$u]:-0} - ${_S_BYTES_START_DOWN[$u]:-0} ))
 				(( session_upload < 0 )) && session_upload=0
 				(( session_download < 0 )) && session_download=0
+				# If /proc/pid/io was 0 or unavailable, use total session bytes as download so traffic fields get updated
+				if [[ "$session_upload" -eq 0 && "$session_download" -eq 0 && "$bytes_sess" -gt 0 ]]; then
+					session_download="$bytes_sess"
+				fi
 				sshplus_log_session "${_S_START_ISO[$u]:-$(sshplus_now_iso)}" "$end_iso" "$delta_hms" "$u" "unknown" "unknown" "$bytes_sess" >/dev/null 2>&1 || true
 				# Update DB: total_traffic_upload, total_traffic_download, last_connection_traffic, latest_connection_date
 				sshplus_with_db_lock update_user_usage_db "$(sshplus_users_db_path)" "$u" "$session_upload" "$session_download" "$end_iso" >/dev/null 2>&1 || true
