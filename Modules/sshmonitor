@@ -87,9 +87,10 @@ mask_password() {
 }
 
 # -------------------- Parse users.db into arrays (read-only) --------------------
-# Sets: _U_LIST = system users (from passwd), _U_max_conn, _U_total_traffic, _U_last_traffic, _U_latest_iso, _U_exp, _U_remaining_days, _U_password
+# Sets: _U_LIST = system users (from passwd), _U_max_conn, _U_total_traffic (_U_tot_up + _U_tot_down), _U_last_traffic, _U_latest_iso, _U_exp, _U_remaining_days, _U_password
+# DB format: 9 columns; field 9 (password) is rest of line and may contain spaces.
 parse_users_db() {
-	local u line username lim exp reg tot last latest pass exp_sec now_sec diff
+	local u line username lim exp reg tot_up tot_down last latest pass exp_sec now_sec diff
 	_U_LIST=()
 	declare -gA _U_max_conn _U_total_traffic _U_last_traffic _U_latest_iso _U_exp _U_remaining_days _U_password 2>/dev/null || true
 
@@ -104,12 +105,13 @@ parse_users_db() {
 		lim=$(awk '{print $2}' <<<"${line:-}")
 		exp=$(awk '{print $3}' <<<"${line:-}")
 		reg=$(awk '{print $4}' <<<"${line:-}")
-		tot=$(awk '{print $5}' <<<"${line:-}")
-		last=$(awk '{print $6}' <<<"${line:-}")
-		latest=$(awk '{print $7}' <<<"${line:-}")
-		pass=$(awk '{print $8}' <<<"${line:-}")
+		tot_up=$(awk '{print $5+0}' <<<"${line:-}")
+		tot_down=$(awk '{print $6+0}' <<<"${line:-}")
+		last=$(awk '{print $7+0}' <<<"${line:-}")
+		latest=$(awk '{print $8}' <<<"${line:-}")
+		pass=$(awk 'NF>=9{rest=$9;for(i=10;i<=NF;i++) rest=rest " " $i; print rest} NF==8{print $8}' <<<"${line:-}")
 		_U_max_conn["$u"]="${lim:-1}"
-		_U_total_traffic["$u"]="${tot:-0}"
+		_U_total_traffic["$u"]=$(( ${tot_up:-0} + ${tot_down:-0} ))
 		_U_last_traffic["$u"]="${last:-0}"
 		_U_latest_iso["$u"]="${latest:-never}"
 		_U_exp["$u"]="${exp:-never}"
@@ -259,7 +261,7 @@ MONITOR_FILTER=1
 declare -A MONITOR_EXPANDED
 
 # Session logging state (per-user, for this sshmonitor run only)
-declare -A _S_ACTIVE _S_START_TS _S_START_ISO _S_BYTES_START _S_BYTES_END
+declare -A _S_ACTIVE _S_START_TS _S_START_ISO _S_BYTES_START _S_BYTES_END _S_BYTES_START_DOWN _S_BYTES_START_UP _S_BYTES_END_DOWN _S_BYTES_END_UP
 
 # Sort labels for header
 _sort_label() {
@@ -302,16 +304,19 @@ _update_session_logs() {
 		now_bytes=$(( ${_L_now_down[$u]:-0} + ${_L_now_up[$u]:-0} ))
 
 		if [[ "$now_count" -gt 0 ]]; then
-			# Session active: keep updating end bytes so we have accurate total when they disconnect
+			# Session active: keep updating end bytes (and up/down) so we have accurate totals when they disconnect
 			if [[ -z "${_S_ACTIVE[$u]:-}" ]]; then
 				_S_ACTIVE["$u"]=1
 				_S_START_TS["$u"]=$(date +%s)
 				_S_START_ISO["$u"]=$(sshplus_now_iso)
 				_S_BYTES_START["$u"]="$now_bytes"
-				# Persist "session start" so last seen and DB are correct
+				_S_BYTES_START_DOWN["$u"]="${_L_now_down[$u]:-0}"
+				_S_BYTES_START_UP["$u"]="${_L_now_up[$u]:-0}"
 				sshplus_with_db_lock sshplus_db_start_session "$u" "$(sshplus_now_iso)" >/dev/null 2>&1 || true
 			fi
 			_S_BYTES_END["$u"]="$now_bytes"
+			_S_BYTES_END_DOWN["$u"]="${_L_now_down[$u]:-0}"
+			_S_BYTES_END_UP["$u"]="${_L_now_up[$u]:-0}"
 		else
 			# No active connections; if we had an active session, close and log it
 			if [[ -n "${_S_ACTIVE[$u]:-}" ]]; then
@@ -322,13 +327,16 @@ _update_session_logs() {
 				delta_sec=$(( end_ts - start_ts ))
 				(( delta_sec < 0 )) && delta_sec=0
 				delta_hms=$(_sec_to_hms "$delta_sec")
-				# Session bytes: use last stored end bytes (from previous refresh when still connected)
 				bytes_sess=$(( ${_S_BYTES_END[$u]:-0} - ${_S_BYTES_START[$u]:-0} ))
 				(( bytes_sess < 0 )) && bytes_sess=0
+				session_upload=$(( ${_S_BYTES_END_UP[$u]:-0} - ${_S_BYTES_START_UP[$u]:-0} ))
+				session_download=$(( ${_S_BYTES_END_DOWN[$u]:-0} - ${_S_BYTES_START_DOWN[$u]:-0} ))
+				(( session_upload < 0 )) && session_upload=0
+				(( session_download < 0 )) && session_download=0
 				sshplus_log_session "${_S_START_ISO[$u]:-$(sshplus_now_iso)}" "$end_iso" "$delta_hms" "$u" "unknown" "unknown" "$bytes_sess" >/dev/null 2>&1 || true
-				# Update total_traffic, last_connection_traffic, and latest_connection_date in one write so they stay in sync
-				sshplus_with_db_lock sshplus_db_end_session "$u" "$bytes_sess" "$end_iso" >/dev/null 2>&1 || true
-				unset _S_ACTIVE["$u"] _S_START_TS["$u"] _S_START_ISO["$u"] _S_BYTES_START["$u"] _S_BYTES_END["$u"]
+				# Update DB: total_traffic_upload, total_traffic_download, last_connection_traffic, latest_connection_date
+				sshplus_with_db_lock update_user_usage_db "$(sshplus_users_db_path)" "$u" "$session_upload" "$session_download" "$end_iso" >/dev/null 2>&1 || true
+				unset _S_ACTIVE["$u"] _S_START_TS["$u"] _S_START_ISO["$u"] _S_BYTES_START["$u"] _S_BYTES_END["$u"] _S_BYTES_START_DOWN["$u"] _S_BYTES_START_UP["$u"] _S_BYTES_END_DOWN["$u"] _S_BYTES_END_UP["$u"]
 			fi
 		fi
 	done

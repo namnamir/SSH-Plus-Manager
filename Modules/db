@@ -5,22 +5,23 @@
 #   - User DB:      $HOME/users.db
 #   - Session log:  $HOME/sessions.log
 #
-# Users DB format (space-separated; exactly 8 fields):
-#   username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password
+# Users DB format (space-separated; 9 columns; password is rest of line and may contain spaces):
+#   username connection_limit expiration_date registration_date total_traffic_upload total_traffic_download last_connection_traffic latest_connection_date password
 #
 # Column meanings:
-#   1 username               - login name
-#   2 connection_limit      - max concurrent connections (number)
-#   3 expiration_date        - account expiry (YYYY-MM-DD or "never")
-#   4 registration_date      - when user was created (YYYY-MM-DD)
-#   5 total_traffic          - total bytes used (number)
-#   6 last_connection_traffic - bytes from last session (number)
-#   7 latest_connection_date - last seen (ISO or "never")
-#   8 password               - plain text password (no spaces)
+#   1 username                - login name
+#   2 connection_limit        - max concurrent connections (number)
+#   3 expiration_date         - account expiry (YYYY-MM-DD or "never")
+#   4 registration_date       - when user was created (YYYY-MM-DD)
+#   5 total_traffic_upload    - cumulative upload bytes across all sessions
+#   6 total_traffic_download  - cumulative download bytes across all sessions
+#   7 last_connection_traffic - upload+download bytes for the just-ended session
+#   8 latest_connection_date  - when user disconnected (ISO-8601 or "never")
+#   9 password                - plain text; rest of line after field 8 (may contain spaces, e.g. "(not set)")
 #
 # Notes:
-# - Password is stored in plain text. Restrict file permissions (chmod 600).
-# - System password is set via `chpasswd` (non-interactive).
+# - Password is the LAST field: "rest of line after the 8th field" so spaces/parentheses are preserved.
+# - Restrict file permissions (chmod 600). System password is set via `chpasswd` (non-interactive).
 # - Updates are atomic (tmp + mv) and guarded by a lock (flock if available; mkdir-lock fallback).
 # - Functions are pure bash and safe to source multiple times.
 
@@ -54,7 +55,7 @@ sshplus_db_init() {
   local db log header firstline tmp
   db="$(sshplus_users_db_path)"
   log="$(sshplus_sessions_log_path)"
-  header="# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password"
+  header="# username connection_limit expiration_date registration_date total_traffic_upload total_traffic_download last_connection_traffic latest_connection_date password"
   if [[ -f "$db" ]]; then
     # Ensure header line exists (for existing DBs created without one)
     firstline=$(head -1 "$db" 2>/dev/null)
@@ -118,8 +119,9 @@ sshplus_db_user_exists() {
 }
 
 sshplus_db_put_user() {
-  # Args: username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password
-  local u="${1:-}" lim="${2:-}" exp="${3:-}" reg="${4:-}" tot="${5:-}" last="${6:-}" latest="${7:-}" pass="${8:-}"
+  # Args: username connection_limit expiration_date registration_date total_traffic_upload total_traffic_download last_connection_traffic latest_connection_date password
+  # Password (arg 9) may contain spaces; we print it as-is so the line keeps "rest of line" for field 9.
+  local u="${1:-}" lim="${2:-}" exp="${3:-}" reg="${4:-}" tot_up="${5:-0}" tot_down="${6:-0}" last="${7:-0}" latest="${8:-never}" pass="${9:-}"
   local db tmp
   db="$(sshplus_users_db_path)"
 
@@ -127,15 +129,15 @@ sshplus_db_put_user() {
   sshplus_is_int "$lim" || return 1
   sshplus_is_date_or_never "$exp" || return 1
   sshplus_is_date_or_never "$reg" || return 1
-  sshplus_is_int "$tot" || return 1
-  sshplus_is_int "$last" || return 1
+  sshplus_is_int "${tot_up:-0}" || tot_up=0
+  sshplus_is_int "${tot_down:-0}" || tot_down=0
+  sshplus_is_int "${last:-0}" || last=0
   sshplus_is_iso_or_never "$latest" || return 1
-  [[ -n "$pass" ]] || return 1
 
   tmp="$(mktemp "${db}.tmp.XXXXXX" 2>/dev/null || echo "${db}.tmp.$$")"
-  # Keep header (# lines) and all other users, then write this user's fresh record
   awk -v u="$u" '$1=="#" || !(NF && $1==u)' "$db" 2>/dev/null > "$tmp" || : > "$tmp"
-  printf "%s %s %s %s %s %s %s %s\n" "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest" "$pass" >> "$tmp"
+  # Print fields 1-8 with spaces, then password as-is (preserves spaces in password)
+  printf "%s %s %s %s %s %s %s %s %s\n" "$u" "$lim" "$exp" "$reg" "$tot_up" "$tot_down" "$last" "$latest" "$pass" >> "$tmp"
   mv -f "$tmp" "$db"
 }
 
@@ -152,7 +154,7 @@ sshplus_db_remove_user() {
 sshplus_db_clear() {
   local db header
   db="$(sshplus_users_db_path)"
-  header="# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password"
+  header="# username connection_limit expiration_date registration_date total_traffic_upload total_traffic_download last_connection_traffic latest_connection_date password"
   printf '%s\n' "$header" > "$db"
 }
 
@@ -166,90 +168,134 @@ sshplus_db_ensure_user() {
   exp="$(chage -l "$u" 2>/dev/null | awk -F: '/Account expires/{gsub(/^[ \t]+/,"",$2); print $2; exit}')"
   [[ -z "$exp" || "$exp" == "never" ]] && exp="never" || exp="$(date -d "$exp" +%F 2>/dev/null || echo "never")"
 
-  sshplus_db_put_user "$u" 1 "$exp" "$(sshplus_now_date)" 0 0 "never" "(not set)"
+  sshplus_db_put_user "$u" 1 "$exp" "$(sshplus_now_date)" 0 0 0 "never" "(not set)"
 }
 
-# Parse a DB line into fields (prints 8 fields, space-separated).
+# Parse a DB line: output 8 fields (space-separated), then TAB, then password (rest of line).
+# Password can contain spaces; using TAB between field 8 and password lets bash read it intact.
+# Supports both 9-field (password = $9 to end) and legacy 8-field (password = $8) lines.
 sshplus_db_parse_line() {
   # shellcheck disable=SC2034
   local line="${1:-}"
-  awk '{print $1,$2,$3,$4,$5,$6,$7,$8}' <<<"$line"
+  awk '
+    NF >= 9 { rest = $9; for (i = 10; i <= NF; i++) rest = rest " " $i; printf "%s %s %s %s %s %s %s %s\t%s\n", $1, $2, $3, $4, $5+0, $6+0, $7+0, $8, rest; next }
+    NF == 8 { printf "%s %s %s %s %s %s %s %s\t%s\n", $1, $2, $3, $4, $5+0, 0, $6+0, $7, $8; next }
+    { printf "%s %s %s %s 0 0 0 never\t\n", $1, $2, $3, $4 }
+  ' <<<"$line"
 }
 
 # -------------------- DB field updates (call under sshplus_with_db_lock) --------------------
 sshplus_db_set_limit() {
-  local u="${1:-}" new_lim="${2:-}" line
+  local u="${1:-}" new_lim="${2:-}" line part1 pass
   sshplus_is_int "$new_lim" || return 1
   sshplus_db_ensure_user "$u" || true
   line="$(sshplus_db_get_line "$u")"
   [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$new_lim" "$exp" "$reg" "$tot" "$last" "$latest" "$pass"
+  IFS=$'\t' read -r part1 pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  sshplus_db_put_user "$u" "$new_lim" "$exp" "$reg" "$tot_up" "$tot_down" "$last" "$latest" "$pass"
 }
 
 sshplus_db_set_expiration() {
-  local u="${1:-}" new_exp="${2:-}" line
+  local u="${1:-}" new_exp="${2:-}" line part1 pass
   sshplus_is_date_or_never "$new_exp" || return 1
   sshplus_db_ensure_user "$u" || true
   line="$(sshplus_db_get_line "$u")"
   [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$lim" "$new_exp" "$reg" "$tot" "$last" "$latest" "$pass"
+  IFS=$'\t' read -r part1 pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  sshplus_db_put_user "$u" "$lim" "$new_exp" "$reg" "$tot_up" "$tot_down" "$last" "$latest" "$pass"
 }
 
 sshplus_db_start_session() {
   # Set session start time and reset last_connection_traffic to 0
-  local u="${1:-}" start_iso="${2:-}" line
+  local u="${1:-}" start_iso="${2:-}" line part1 pass
   sshplus_is_iso_or_never "$start_iso" || return 1
   sshplus_db_ensure_user "$u" || true
   line="$(sshplus_db_get_line "$u")"
   [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" 0 "$start_iso" "$pass"
+  IFS=$'\t' read -r part1 pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot_up" "$tot_down" 0 "$start_iso" "$pass"
 }
 
 sshplus_db_add_traffic() {
-  # Increment total_traffic and set last_connection_traffic to session_bytes
-  local u="${1:-}" delta_bytes="${2:-}" session_bytes="${3:-}" line
+  # Legacy: add single session_bytes to both upload and download totals. Prefer update_user_usage_db for separate up/down.
+  local u="${1:-}" delta_bytes="${2:-}" session_bytes="${3:-}" line part1 pass
   sshplus_is_int "${delta_bytes:-0}" || delta_bytes=0
   sshplus_is_int "${session_bytes:-0}" || session_bytes=0
   sshplus_db_ensure_user "$u" || true
   line="$(sshplus_db_get_line "$u")"
   [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  tot=$(( ${tot:-0} + ${delta_bytes:-0} ))
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$session_bytes" "$latest" "$pass"
+  IFS=$'\t' read -r part1 pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  tot_up=$(( ${tot_up:-0} + ${delta_bytes:-0} ))
+  tot_down=$(( ${tot_down:-0} + ${session_bytes:-0} ))
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot_up" "$tot_down" "$session_bytes" "$latest" "$pass"
 }
 
 # Set only latest_connection_date (e.g. when session ends so "last seen" is correct)
 sshplus_db_set_latest_connection() {
-  local u="${1:-}" latest_iso="${2:-}" line
+  local u="${1:-}" latest_iso="${2:-}" line part1 pass
   sshplus_is_iso_or_never "$latest_iso" || return 1
   sshplus_db_ensure_user "$u" || true
   line="$(sshplus_db_get_line "$u")"
   [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest_iso" "$pass"
+  IFS=$'\t' read -r part1 pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot_up" "$tot_down" "$last" "$latest_iso" "$pass"
 }
 
-# Atomically update total_traffic, last_connection_traffic, and latest_connection_date on session end.
-# Use this instead of calling add_traffic + set_latest_connection separately so both fields stay in sync.
-sshplus_db_end_session() {
-  local u="${1:-}" session_bytes="${2:-}" end_iso="${3:-}" line
-  sshplus_is_int "${session_bytes:-0}" || session_bytes=0
-  sshplus_is_iso_or_never "$end_iso" || return 1
-  sshplus_db_ensure_user "$u" || true
-  line="$(sshplus_db_get_line "$u")"
-  [[ -z "$line" ]] && return 1
-  local _u lim exp reg tot last latest pass
-  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
-  tot=$(( ${tot:-0} + ${session_bytes:-0} ))
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$session_bytes" "$end_iso" "$pass"
+# -------------------- update_user_usage_db --------------------
+# On disconnect: update totals (upload/download), last_connection_traffic, and latest_connection_date.
+# Password (field 9) is "rest of line" and preserved exactly by doing the update in awk (never passed to shell).
+# Usage: update_user_usage_db "<db_path>" "<username>" "<upload_bytes>" "<download_bytes>" "<disconnect_timestamp>"
+# Returns 0 on success, non-zero if username not found.
+#
+# Example (call under sshplus_with_db_lock when used from scripts that share the DB):
+#   db_path="$(sshplus_users_db_path)"
+#   if sshplus_with_db_lock update_user_usage_db "$db_path" "test1" 123 456 "2026-01-29T12:34:56+00:00"; then
+#     echo "Updated test1: +123 upload, +456 download, last seen 2026-01-29T12:34:56+00:00"
+#   else
+#     echo "User test1 not found in $db_path"
+#   fi
+update_user_usage_db() {
+  local db_path="${1:-}" username="${2:-}" upload_bytes="${3:-0}" download_bytes="${4:-0}" timestamp="${5:-never}"
+  local tmp
+  [[ -n "$db_path" ]] || return 1
+  [[ -n "$username" ]] || return 1
+  upload_bytes=$(( upload_bytes + 0 ))
+  download_bytes=$(( download_bytes + 0 ))
+  tmp="$(mktemp "${db_path}.tmp.XXXXXX" 2>/dev/null || echo "${db_path}.tmp.$$")"
+  awk -v u="$username" -v up="$upload_bytes" -v down="$download_bytes" -v ts="$timestamp" '
+    BEGIN { found = 0 }
+    $1 == "#" { print; next }
+    $1 == u {
+      found = 1
+      old_up = $5 + 0
+      old_down = $6 + 0
+      new_up = old_up + up
+      new_down = old_down + down
+      last_traffic = up + down
+      rest = (NF >= 9) ? $9 : $8
+      if (NF >= 9) for (i = 10; i <= NF; i++) rest = rest " " $i
+      printf "%s %s %s %s %s %s %s %s %s\n", $1, $2, $3, $4, new_up, new_down, last_traffic, ts, rest
+      next
+    }
+    { print }
+    END { if (!found) exit 1 }
+  ' "$db_path" 2>/dev/null > "$tmp"
+  if [[ $? -ne 0 ]]; then
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
+  fi
+  mv -f "$tmp" "$db_path" 2>/dev/null || return 1
+  return 0
 }
 
 # -------------------- password sync --------------------
@@ -270,9 +316,11 @@ sshplus_db_set_password() {
 
   sshplus_set_system_password "$u" "$pass" || return 1
 
-  local _u lim exp reg tot last latest _pass
-  read -r _u lim exp reg tot last latest _pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest" "$pass"
+  local part1 _pass
+  IFS=$'\t' read -r part1 _pass <<<"$(sshplus_db_parse_line "$line")"
+  local _u lim exp reg tot_up tot_down last latest
+  read -r _u lim exp reg tot_up tot_down last latest <<<"$part1"
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot_up" "$tot_down" "$last" "$latest" "$pass"
 }
 
 # -------------------- session logging --------------------

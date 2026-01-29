@@ -46,7 +46,8 @@ while read -r user; do
 		_line="$(sshplus_db_get_line "$user" 2>/dev/null || true)"
 	fi
 	lim="$(awk '{print $2}' <<<"${_line:-}" 2>/dev/null)"; [[ -z "${lim:-}" ]] && lim="1"
-	senha="$(awk '{print $8}' <<<"${_line:-}" 2>/dev/null)"; [[ -z "${senha:-}" ]] && senha="sha256:UNKNOWN"
+	# Field 9 is password (rest of line); legacy 8-field has password in $8
+	senha="$(awk 'NF>=9{rest=$9;for(i=10;i<=NF;i++) rest=rest " " $i; print rest} NF==8{print $8}' <<<"${_line:-}" 2>/dev/null)"; [[ -z "${senha:-}" ]] && senha="sha256:UNKNOWN"
 	[[ ${#senha} -gt 14 ]] && senha="${senha:0:12}.."
 	exp_raw="$(awk '{print $3}' <<<"${_line:-}" 2>/dev/null)"; [[ -z "${exp_raw:-}" ]] && exp_raw="never"
 	if [[ "$exp_raw" == "never" ]]; then
