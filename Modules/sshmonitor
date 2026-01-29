@@ -64,11 +64,10 @@ fmt_bytes_compact() {
 fmt_last_seen() {
 	local v="${1:-}"
 	[[ -z "$v" || "$v" == "never" ]] && echo "never" && return
-	local epoch now_sec d dt
+	local epoch
 	epoch=$(date -d "$v" +%s 2>/dev/null) || { echo "never"; return; }
-	now_sec=$(date +%s 2>/dev/null) || now_sec=0
-	[[ -z "${now_sec:-}" || ! "${now_sec:-0}" =~ ^[0-9]+$ ]] && now_sec=0
-	d=$(( (now_sec - epoch) / 86400 ))
+	local now_sec=$(date +%s) d=$(( (now_sec - epoch) / 86400 ))
+	local dt
 	dt=$(date -d "@$epoch" +"%d/%m %H:%M" 2>/dev/null) || dt="?"
 	echo "${dt} (${d}d)"
 }
@@ -174,23 +173,6 @@ get_live_connections() {
 				local et
 				et=$(ps -o etimes= -p "$pid" 2>/dev/null)
 				[[ -n "$et" && "$et" =~ ^[0-9]+$ ]] && etime_sec=$et
-				# Fallback: some systems use etime ([[DD-]HH:]MM:SS) instead of etimes
-				if [[ ${etime_sec:-0} -eq 0 ]]; then
-					et=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
-					if [[ -n "$et" ]]; then
-						etime_sec=$(echo "$et" | awk -F: '{
-							n=NF
-							sec = (n>=1) ? $n+0 : 0
-							min = (n>=2) ? $(n-1)+0 : 0
-							x = (n>=3) ? $(n-2) : "0"
-							split(x, a, "-")
-							hr  = (length(a)>=2) ? a[2]+0 : x+0
-							day = (length(a)>=2) ? a[1]+0 : 0
-							print sec + min*60 + hr*3600 + day*86400
-						}')
-						[[ -z "$etime_sec" || ! "$etime_sec" =~ ^[0-9]+$ ]] && etime_sec=0
-					fi
-				fi
 				((idx++)) || true
 				sum_down=$((sum_down + r)); sum_up=$((sum_up + w)); sum_time=$((sum_time + etime_sec))
 				conn_lines+="${idx}|${r}|${w}|${etime_sec}"$'\n'
@@ -394,13 +376,12 @@ print_user_monitor_screen() {
 	local cols
 	cols=$(term_cols 2>/dev/null) || cols=80
 	local sep
-	sep=$(printf '%*s' "$cols" "" | tr ' ' '-')
+	sep=$(printf '%*s' "$cols" "" | tr ' ' '─')
 
-	# Title + auto-refresh on one line (spec: USERS MONITORING, auto-refresh: 10s)
+	# Title + auto-refresh (spec: USERS MONITORING, auto-refresh: 10s)
 	local refresh_interval
 	refresh_interval=$(get_refresh_interval)
-	# Padding so title + "auto-refresh: Ns" fits in cols (17 + 18 = 35 chars for right part)
-	printf "%bUSERS MONITORING%b%*s%bauto-refresh: %ds%b\n" "$(c ui_title)" "$(reset)" "$(( cols - 35 ))" "" "$(c ui_value)" "$refresh_interval" "$(reset)"
+	printf "%bUSERS MONITORING%b%*s%bauto-refresh: %ds%b\n" "$(c ui_title)" "$(reset)" "$(( cols - 28 ))" "" "$(c ui_value)" "$refresh_interval" "$(reset)"
 	printf "%b%s%b\n" "$(c ui_frame)" "$sep" "$(reset)"
 	echo ""
 
@@ -464,39 +445,30 @@ print_user_monitor_screen() {
 			now_up="${_L_now_up[$u]:-0}"
 			now_time_sec="${_L_now_time_sec[$u]:-0}"
 
-			local conn_lines
-			conn_lines="${_L_connections[$u]:-}"
-
+			local now_traffic_str now_time_str last_seen_str
 			if [[ "$now_count" -gt 0 ]]; then
-				local now_traffic_str now_time_str
 				now_traffic_str="Σ $(fmt_bytes_compact "$now_down")/$(fmt_bytes_compact "$now_up")"
 				now_time_str=$(_sec_to_hms "$now_time_sec")
-				if [[ -z "$conn_lines" ]]; then
-					# No per-connection data (e.g. OpenVPN-only): one summary line only
-					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
-				elif [[ -n "${MONITOR_EXPANDED[$u]:-}" ]]; then
-					# Expanded: summary line + one row per session (↳ #1, #2, …)
-					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
-					local idx=0
-					while IFS= read -r line; do
-						[[ -z "$line" ]] && continue
-						((idx++)) || true
-						local slot down up t_sec
-						IFS='|' read -r slot down up t_sec <<<"$line"
-						now_traffic_str="$(fmt_bytes_compact "$down")/$(fmt_bytes_compact "$up")"
-						now_time_str=$(_sec_to_hms "${t_sec:-0}")
-						printf "   ↳ #%-8s %5s/%s   %-14s %-10s now\n" "$idx" "$idx" "$max_conn" "$now_traffic_str" "$now_time_str"
-					done <<<"$conn_lines"
-				else
-					# Collapsed: single summary line (same as OpenVPN)
-					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
-				fi
+				last_seen_str="now"
 			else
-				local now_traffic_str now_time_str last_seen_str
 				now_traffic_str="-"
 				now_time_str="-"
 				last_seen_str=$(fmt_last_seen "$latest_iso")
-				printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "$last_seen_str"
+			fi
+
+			printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "$last_seen_str"
+
+			# Child rows when expanded and active
+			if [[ "$now_count" -gt 0 && -n "${MONITOR_EXPANDED[$u]:-}" ]]; then
+				local conn_lines="${_L_connections[$u]:-}" idx=0
+				while IFS= read -r line; do
+					[[ -z "$line" ]] && continue
+					((idx++)) || true
+					local slot down up t_sec
+					IFS='|' read -r slot down up t_sec <<<"$line"
+					printf "   ↳ #%-8s %s/%s %7s/%-7s %-10s now\n" "$idx" "$slot" "$max_conn" \
+						"$(fmt_bytes_compact "$down")" "$(fmt_bytes_compact "$up")" "$(_sec_to_hms "$t_sec")"
+				done <<<"$conn_lines"
 			fi
 		done
 		echo ""
@@ -506,11 +478,7 @@ print_user_monitor_screen() {
 	echo ""
 	# Footer: show [e] Expand only when there are active users (spec)
 	if [[ "$n_active" -gt 0 ]]; then
-		if [[ "${MONITOR_EXPAND:-0}" -eq 1 ]]; then
-			printf "%bKeys: [Enter] Back  [d] Details  [e] Expand (on)  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
-		else
-			printf "%bKeys: [Enter] Back  [d] Details  [e] Expand  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
-		fi
+		printf "%bKeys: [Enter] Back  [d] Details  [e] Expand  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
 	else
 		printf "%bKeys: [Enter] Back  [d] Details  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
 	fi
@@ -529,7 +497,7 @@ print_user_monitor_details() {
 	local cols
 	cols=$(term_cols 2>/dev/null) || cols=80
 	local sep
-	sep=$(printf '%*s' "$cols" "" | tr ' ' '-')
+	sep=$(printf '%*s' "$cols" "" | tr ' ' '─')
 
 	printf "%bUSERS MONITORING — Details%b\n" "$(c ui_title)" "$(reset)"
 	printf "%b%s%b\n" "$(c ui_frame)" "$sep" "$(reset)"
@@ -611,23 +579,19 @@ _monitor_handle_key() {
 }
 
 # Main loop: configurable refresh interval, keep state, Enter = back to menu
-# Wrapped in a function so any loop-local vars can use 'local' (bash requires local inside functions).
-_monitor_main() {
-	local refresh_interval key
-	while true; do
-		clear
-		if [[ "${MONITOR_DETAILS:-0}" -eq 1 ]]; then
-			print_user_monitor_details
-		else
-			print_user_monitor_screen
-		fi
-		refresh_interval=$(get_refresh_interval)
-		read -r -t "$refresh_interval" -n 1 key 2>/dev/null || key=""
-		# Allow multi-char for "P" (Shift+p might send different byte)
-		[[ -z "$key" ]] && continue
-		_monitor_handle_key "$key" && continue
-		# Enter pressed
-		break
-	done
-}
-_monitor_main
+while true; do
+	clear
+	if [[ "${MONITOR_DETAILS:-0}" -eq 1 ]]; then
+		print_user_monitor_details
+	else
+		print_user_monitor_screen
+	fi
+	local refresh_interval
+	refresh_interval=$(get_refresh_interval)
+	read -r -t "$refresh_interval" -n 1 key 2>/dev/null || key=""
+	# Allow multi-char for "P" (Shift+p might send different byte)
+	[[ -z "$key" ]] && continue
+	_monitor_handle_key "$key" && continue
+	# Enter pressed
+	break
+done
