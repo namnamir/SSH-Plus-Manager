@@ -8,9 +8,19 @@
 # Users DB format (space-separated; exactly 8 fields):
 #   username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password
 #
-# Notes / assumptions:
-# - "password" is stored as a deterministic hash for consistency (sha256), prefixed with "sha256:".
-# - System password is set via `chpasswd` (non-interactive); we do not call `passwd`.
+# Column meanings:
+#   1 username               - login name
+#   2 connection_limit      - max concurrent connections (number)
+#   3 expiration_date        - account expiry (YYYY-MM-DD or "never")
+#   4 registration_date      - when user was created (YYYY-MM-DD)
+#   5 total_traffic          - total bytes used (number)
+#   6 last_connection_traffic - bytes from last session (number)
+#   7 latest_connection_date - last seen (ISO or "never")
+#   8 password               - plain text password (no spaces)
+#
+# Notes:
+# - Password is stored in plain text. Restrict file permissions (chmod 600).
+# - System password is set via `chpasswd` (non-interactive).
 # - Updates are atomic (tmp + mv) and guarded by a lock (flock if available; mkdir-lock fallback).
 # - Functions are pure bash and safe to source multiple times.
 
@@ -40,27 +50,12 @@ sshplus_is_iso_or_never() {
   return 0
 }
 
-# Deterministic password hash (for DB storage only)
-sshplus_hash_password() {
-  local pass="${1:-}"
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf "sha256:%s" "$(printf "%s" "$pass" | sha256sum | awk '{print $1}')"
-    return 0
-  fi
-  if command -v openssl >/dev/null 2>&1; then
-    # openssl output: "(stdin)= <hash>"
-    printf "sha256:%s" "$(printf "%s" "$pass" | openssl dgst -sha256 2>/dev/null | awk '{print $NF}')"
-    return 0
-  fi
-  # Worst-case fallback: still return something stable
-  printf "sha256:%s" "$pass"
-}
-
 sshplus_db_init() {
-  local db log
+  local db log header
   db="$(sshplus_users_db_path)"
   log="$(sshplus_sessions_log_path)"
-  [[ -f "$db" ]] || { mkdir -p "$(dirname "$db")" 2>/dev/null || true; : > "$db"; chmod 600 "$db" 2>/dev/null || true; }
+  header="# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password"
+  [[ -f "$db" ]] || { mkdir -p "$(dirname "$db")" 2>/dev/null || true; printf '%s\n' "$header" > "$db"; chmod 600 "$db" 2>/dev/null || true; }
   [[ -f "$log" ]] || { mkdir -p "$(dirname "$log")" 2>/dev/null || true; : > "$log"; chmod 600 "$log" 2>/dev/null || true; }
 }
 
@@ -103,7 +98,7 @@ sshplus_db_get_line() {
   local u="${1:-}" db
   db="$(sshplus_users_db_path)"
   [[ -z "$u" ]] && return 1
-  grep -m1 -E "^${u}[[:space:]]" "$db" 2>/dev/null || true
+  grep -m1 -E "^${u}[[:space:]]" "$db" 2>/dev/null | head -1 || true
 }
 
 sshplus_db_user_exists() {
@@ -127,8 +122,8 @@ sshplus_db_put_user() {
   [[ -n "$pass" ]] || return 1
 
   tmp="$(mktemp "${db}.tmp.XXXXXX" 2>/dev/null || echo "${db}.tmp.$$")"
-  # Keep all other users, then write this user's fresh record
-  awk -v u="$u" '!(NF && $1==u)' "$db" 2>/dev/null > "$tmp" || : > "$tmp"
+  # Keep header (# lines) and all other users, then write this user's fresh record
+  awk -v u="$u" '$1=="#" || !(NF && $1==u)' "$db" 2>/dev/null > "$tmp" || : > "$tmp"
   printf "%s %s %s %s %s %s %s %s\n" "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest" "$pass" >> "$tmp"
   mv -f "$tmp" "$db"
 }
@@ -138,15 +133,16 @@ sshplus_db_remove_user() {
   db="$(sshplus_users_db_path)"
   [[ -z "$u" ]] && return 1
   tmp="$(mktemp "${db}.tmp.XXXXXX" 2>/dev/null || echo "${db}.tmp.$$")"
-  awk -v u="$u" '!(NF && $1==u)' "$db" 2>/dev/null > "$tmp" || : > "$tmp"
+  awk -v u="$u" '$1=="#" || !(NF && $1==u)' "$db" 2>/dev/null > "$tmp" || : > "$tmp"
   mv -f "$tmp" "$db"
 }
 
-# Clear the entire DB (use under sshplus_with_db_lock)
+# Clear the entire DB (use under sshplus_with_db_lock); preserves header
 sshplus_db_clear() {
-  local db
+  local db header
   db="$(sshplus_users_db_path)"
-  : > "$db"
+  header="# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password"
+  printf '%s\n' "$header" > "$db"
 }
 
 # Ensure a record exists for a system user. If missing, create with safe defaults.
@@ -159,7 +155,7 @@ sshplus_db_ensure_user() {
   exp="$(chage -l "$u" 2>/dev/null | awk -F: '/Account expires/{gsub(/^[ \t]+/,"",$2); print $2; exit}')"
   [[ -z "$exp" || "$exp" == "never" ]] && exp="never" || exp="$(date -d "$exp" +%F 2>/dev/null || echo "never")"
 
-  sshplus_db_put_user "$u" 1 "$exp" "$(sshplus_now_date)" 0 0 "never" "$(sshplus_hash_password "UNKNOWN")"
+  sshplus_db_put_user "$u" 1 "$exp" "$(sshplus_now_date)" 0 0 "never" "(not set)"
 }
 
 # Parse a DB line into fields (prints 8 fields, space-separated).
@@ -227,7 +223,7 @@ sshplus_set_system_password() {
 }
 
 sshplus_db_set_password() {
-  # Change system password then (only on success) update DB hash.
+  # Change system password then (on success) update DB with plain text password.
   local u="${1:-}" pass="${2:-}" line
   [[ -z "$u" ]] && return 1
   sshplus_db_ensure_user "$u" || true
@@ -238,7 +234,7 @@ sshplus_db_set_password() {
 
   local _u lim exp reg tot last latest _pass
   read -r _u lim exp reg tot last latest _pass <<<"$(sshplus_db_parse_line "$line")"
-  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest" "$(sshplus_hash_password "$pass")"
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest" "$pass"
 }
 
 # -------------------- session logging --------------------

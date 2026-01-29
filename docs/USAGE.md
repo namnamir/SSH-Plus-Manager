@@ -161,6 +161,27 @@ In submenus, **0** usually means “back” and **00** means “exit entirely”
 | `/etc/IP` | Cached server IP (used in banner and “Create user” output) |
 | `/etc/banner` | SSH login banner text |
 
+### users.db format (column meanings)
+
+The file has **no header** by default on older installs. New installs get a comment header line. Each data line has exactly **8 space-separated columns**:
+
+| Column | Meaning |
+|--------|---------|
+| 1 | **username** — login name |
+| 2 | **connection_limit** — max simultaneous connections (number) |
+| 3 | **expiration_date** — account expiry (YYYY-MM-DD or `never`) |
+| 4 | **registration_date** — when user was created (YYYY-MM-DD) |
+| 5 | **total_traffic** — total bytes used (number) |
+| 6 | **last_connection_traffic** — bytes from last session (number) |
+| 7 | **latest_connection_date** — last seen (ISO or `never`) |
+| 8 | **password** — plain text password (no spaces) |
+
+To add a header line to an existing file, prepend:
+
+```
+# username connection_limit expiration_date registration_date total_traffic last_connection_traffic latest_connection_date password
+```
+
 ---
 
 ## More documentation
