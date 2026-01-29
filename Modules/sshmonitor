@@ -326,9 +326,8 @@ _update_session_logs() {
 				bytes_sess=$(( ${_S_BYTES_END[$u]:-0} - ${_S_BYTES_START[$u]:-0} ))
 				(( bytes_sess < 0 )) && bytes_sess=0
 				sshplus_log_session "${_S_START_ISO[$u]:-$(sshplus_now_iso)}" "$end_iso" "$delta_hms" "$u" "unknown" "unknown" "$bytes_sess" >/dev/null 2>&1 || true
-				# Update total traffic and last seen in DB
-				sshplus_with_db_lock sshplus_db_add_traffic "$u" "$bytes_sess" "$bytes_sess" >/dev/null 2>&1 || true
-				sshplus_with_db_lock sshplus_db_set_latest_connection "$u" "$end_iso" >/dev/null 2>&1 || true
+				# Update total_traffic, last_connection_traffic, and latest_connection_date in one write so they stay in sync
+				sshplus_with_db_lock sshplus_db_end_session "$u" "$bytes_sess" "$end_iso" >/dev/null 2>&1 || true
 				unset _S_ACTIVE["$u"] _S_START_TS["$u"] _S_START_ISO["$u"] _S_BYTES_START["$u"] _S_BYTES_END["$u"]
 			fi
 		fi

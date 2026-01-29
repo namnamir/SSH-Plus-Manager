@@ -237,6 +237,21 @@ sshplus_db_set_latest_connection() {
   sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$last" "$latest_iso" "$pass"
 }
 
+# Atomically update total_traffic, last_connection_traffic, and latest_connection_date on session end.
+# Use this instead of calling add_traffic + set_latest_connection separately so both fields stay in sync.
+sshplus_db_end_session() {
+  local u="${1:-}" session_bytes="${2:-}" end_iso="${3:-}" line
+  sshplus_is_int "${session_bytes:-0}" || session_bytes=0
+  sshplus_is_iso_or_never "$end_iso" || return 1
+  sshplus_db_ensure_user "$u" || true
+  line="$(sshplus_db_get_line "$u")"
+  [[ -z "$line" ]] && return 1
+  local _u lim exp reg tot last latest pass
+  read -r _u lim exp reg tot last latest pass <<<"$(sshplus_db_parse_line "$line")"
+  tot=$(( ${tot:-0} + ${session_bytes:-0} ))
+  sshplus_db_put_user "$u" "$lim" "$exp" "$reg" "$tot" "$session_bytes" "$end_iso" "$pass"
+}
+
 # -------------------- password sync --------------------
 sshplus_set_system_password() {
   local u="${1:-}" pass="${2:-}"
