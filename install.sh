@@ -76,18 +76,18 @@ done
 if [[ -f "$_SCRIPT_DIR/Modules/colors" ]]; then
 	source "$_SCRIPT_DIR/Modules/colors"
 elif [[ -f /etc/SSHPlus/colors ]]; then
-	source /etc/SSHPlus/colors
+    source /etc/SSHPlus/colors
 elif [[ -f /bin/colors ]]; then
-	source /bin/colors
+    source /bin/colors
 else
-	_tmp_colors="/tmp/sshplus_colors_$$"
+    _tmp_colors="/tmp/sshplus_colors_$$"
 	if command -v curl >/dev/null 2>&1 && curl -sfL --max-time 10 "$_REPO_URL/Modules/colors" -o "$_tmp_colors" 2>/dev/null; then
 		source "$_tmp_colors"
 		rm -f "$_tmp_colors" 2>/dev/null
 	elif command -v wget >/dev/null 2>&1 && wget -q "$_REPO_URL/Modules/colors" -O "$_tmp_colors" 2>/dev/null; then
-		source "$_tmp_colors"
-		rm -f "$_tmp_colors" 2>/dev/null
-	else
+        source "$_tmp_colors"
+        rm -f "$_tmp_colors" 2>/dev/null
+    else
 		# Minimal fallback
 		color_echo()   { printf "\033[1;37m%s\033[0m\n" "$1"; }
 		color_echo_n() { printf "\033[1;37m%s\033[0m" "$1"; }
@@ -173,7 +173,7 @@ info()      { _msg_info "$1"; log "INFO: $1"; }
 require_root() {
 	if [[ "$(id -u)" -ne 0 ]]; then
 		step_err "This installer must be run as root."
-		exit 1
+    exit 1
 	fi
 	step_ok "Running as root"
 }
@@ -345,10 +345,10 @@ _1nk=$(echo '/3×u3#s×87r/83×l2×4×i0b×' | sed -e 's/[^a-z/]//ig')
 
 verif_key() {
 	chmod +x "$_Ink/list" >/dev/null 2>&1 || true
-	if [[ ! -e "$_Ink/list" ]]; then
+    if [[ ! -e "$_Ink/list" ]]; then
 		step_err "Invalid or missing installation key (Install/list)."
-		exit 1
-	fi
+        exit 1
+    fi
 }
 
 download_install_list() {
@@ -365,17 +365,17 @@ download_install_list() {
 		if ! wget -q -P "$_Ink" "$_REPO_URL/Install/list" 2>/dev/null; then
 			step_err "Failed to download installer payload (Install/list)."
 			step_warn "Check network or try again later."
-			exit 1
-		fi
+        exit 1
+    fi
 	else
 		step_err "Neither curl nor wget found. Install one of them to run this installer."
 		exit 1
-	fi
-	if [[ ! -s "$_Ink/list" ]]; then
+fi
+if [[ ! -s "$_Ink/list" ]]; then
 		step_err "Downloaded Install/list is empty or invalid."
-		exit 1
-	fi
-	verif_key
+    exit 1
+fi
+verif_key
 	step_ok "Installer payload downloaded"
 }
 
