@@ -204,10 +204,15 @@ kv() {
 # -------------------- messages --------------------
 # Use two spaces after the icon so it remains visually separated from text
 # even with double-width emoji glyphs in some terminals.
-msg_ok()   { printf "%b✔  %s%b\n" "$(c ui_ok)" "$1" "$(reset)"; }
-msg_warn() { printf "%b⚠  %s%b\n" "$(c ui_warn)" "$1" "$(reset)"; }
-msg_err()  { printf "%b✖  %s%b\n" "$(c ui_danger)" "$1" "$(reset)"; }
-msg_info() { printf "%bℹ  %s%b\n" "$(c ui_info)" "$1" "$(reset)"; }
+# All msg_* wait for Enter so the user can read the message.
+_msg_wait_enter() {
+	printf "\n%bPress Enter to continue...%b" "$(c muted)" "$(reset)"
+	read -r
+}
+msg_ok()   { printf "%b✔  %s%b\n" "$(c ui_ok)" "$1" "$(reset)"; _msg_wait_enter; }
+msg_warn() { printf "%b⚠  %s%b\n" "$(c ui_warn)" "$1" "$(reset)"; _msg_wait_enter; }
+msg_err()  { printf "%b✖  %s%b\n" "$(c ui_danger)" "$1" "$(reset)"; _msg_wait_enter; }
+msg_info() { printf "%bℹ  %s%b\n" "$(c ui_info)" "$1" "$(reset)"; _msg_wait_enter; }
 
 banner_info()   { printf "%b %s %b\n" "$(c bg_info)" "$1" "$(reset)"; }
 banner_danger() { printf "%b %s %b\n" "$(c bg_danger)" "$1" "$(reset)"; }

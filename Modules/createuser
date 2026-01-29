@@ -46,24 +46,22 @@ _get_ssh_port() {
 	echo "$port"
 }
 
-# Get ports in use (LISTEN) the same way as the connections menu: lsof TCP LISTEN
-_get_ports_in_use() {
-	local ports=""
-	local PT
-	if command -v lsof >/dev/null 2>&1; then
-		PT=$(lsof -V -i tcp -P -n 2>/dev/null | grep -v "ESTABLISHED" | grep -v "COMMAND" | grep "LISTEN")
-		[[ -n "$PT" ]] && ports=$(echo -e "$PT" | cut -d: -f2 | cut -d' ' -f1 | sort -nu | uniq | tr '\n' ' ')
-	fi
-	# Fallback to ss/netstat if lsof not available or returned nothing
-	if [[ -z "$ports" ]] && command -v ss >/dev/null 2>&1; then
-		ports=$(ss -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$5); print $5}' | sort -nu | tr '\n' ' ')
-	fi
-	if [[ -z "$ports" ]] && command -v netstat >/dev/null 2>&1; then
-		ports=$(netstat -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$4); print $4}' | sort -nu | tr '\n' ' ')
-	fi
-	# Trim trailing space
+# Get SSH ports from /etc/ssh/sshd_config only (same pattern as multiport)
+_get_ssh_ports_from_config() {
+	local ports
+	ports=$(grep -E '^[[:space:]]*Port[[:space:]]+' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' | sort -nu | uniq | tr '\n' ' ')
 	ports="${ports%"${ports##*[![:space:]]}"}"
+	[[ -z "$ports" ]] && ports="22"
 	echo "$ports"
+}
+
+# Check if port is in the SSH ports list from sshd_config
+_is_port_in_ssh_config() {
+	local check_port="$1" list
+	[[ -z "$check_port" ]] && return 1
+	list="$(_get_ssh_ports_from_config)"
+	[[ " $list " =~ " $check_port " ]] && return 0
+	return 1
 }
 
 # -------------------- npvt-ssh:// helpers --------------------
@@ -460,12 +458,10 @@ while true; do
 	title_line "CREATE USER"
 	printf "%b   %b0%b = Back   %b00%b = Exit\n\n" "$(c muted)" "$(c ui_value)" "$(c muted)" "$(c ui_value)" "$(reset)"
 
-	# Display ports in use (same source as connections menu) – use one of these in your config
-	_ports_in_use="$(_get_ports_in_use)"
-	if [[ -n "$_ports_in_use" ]]; then
-		printf "%b🔌 Ports you can use in config (listening):%b %s\n" "$(c ui_label)" "$(reset)" "$(c ui_value)$_ports_in_use$(reset)"
-		echo ""
-	fi
+	# Display SSH ports from /etc/ssh/sshd_config – use one of these in your config
+	_ssh_ports_list="$(_get_ssh_ports_from_config)"
+	printf "%b🔌 Ports you can use in config (from /etc/ssh/sshd_config):%b %s\n" "$(c ui_label)" "$(reset)" "$(c ui_value)$_ssh_ports_list$(reset)"
+	echo ""
 
 	# Username (0 = Back, 00 = Exit to cancel)
 	printf "%b👤 Username:%b (0=Back 00=Exit) " "$(c ui_label)" "$(reset)"
@@ -475,19 +471,16 @@ while true; do
 	[[ "$username" == "00" ]] && exit 99
 	if [[ -z "$username" ]]; then
 		msg_err "Username is required."
-		sleep 1
 		clear
 		continue
 	fi
 	if [[ "$(grep -wc "$username" /etc/passwd 2>/dev/null)" != '0' ]]; then
 		msg_err "This user already exists. Try another name."
-		sleep 1
 		clear
 		continue
 	fi
 	if ! [[ "$username" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{1,9}$ ]]; then
 		msg_err "Invalid username. Use 2-10 chars: letters/numbers/_/-"
-		sleep 1
 		clear
 		continue
 	fi
@@ -509,7 +502,6 @@ while true; do
 	password="$(_trim "$password")"
 	if [[ ${#password} -lt 4 ]]; then
 		msg_err "Password too short (min 4)."
-		sleep 1
 		clear
 		continue
 	fi
@@ -533,7 +525,11 @@ while true; do
 	[[ -z "$ssh_port" ]] && ssh_port="$_default_port"
 	if ! _is_int "$ssh_port" || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
 		msg_err "Invalid port. Must be a number between 1 and 65535."
-		sleep 1
+		clear
+		continue
+	fi
+	if ! _is_port_in_ssh_config "$ssh_port"; then
+		msg_err "Port $ssh_port is not in the list above (not in /etc/ssh/sshd_config). Use one of: $_ssh_ports_list"
 		clear
 		continue
 	fi
@@ -545,7 +541,6 @@ while true; do
 	[[ -z "$dias" ]] && dias="$_default_days"
 	if ! _is_int "$dias" || [[ "$dias" -lt 1 ]]; then
 		msg_err "Expiration days must be a positive number."
-		sleep 1
 		clear
 		continue
 	fi
@@ -556,7 +551,6 @@ while true; do
 	[[ -z "$sshlimiter" ]] && sshlimiter="$_default_limit"
 	if ! _is_int "$sshlimiter" || [[ "$sshlimiter" -lt 1 ]]; then
 		msg_err "Connection limit must be a positive number."
-		sleep 1
 		clear
 		continue
 	fi
