@@ -22,10 +22,10 @@ SSH Plus Manager includes the multi-port tool. Install with:
 
 ```bash
 # With curl:
-bash <(curl -Ls https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh)
 
 # Or with wget:
-wget -qO- https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh | bash
 ```
 
 Then run **menu** and go to **[08] CONNECTIONS** → **SSH Multi-Port Setup**.

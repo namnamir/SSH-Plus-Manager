@@ -25,12 +25,12 @@
 
 ```bash
 # در صورت داشتن curl:
-bash <(curl -Ls https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh)
 ```
 
 ```bash
 # در صورت داشتن wget (یا نبود curl):
-wget -qO- https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh | bash
 ```
 
 </div>

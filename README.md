@@ -64,12 +64,12 @@ Run **one** of these on your server as **root** (use the first if you have `curl
 
 ```bash
 # With curl:
-bash <(curl -Ls https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh)
 ```
 
 ```bash
 # With wget:
-wget -qO- https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh | bash
 ```
 
 **Requirements:** Root, `curl` or `wget`, and a Debian/Ubuntu-style system. The installer installs dependencies (e.g. `wget`, `curl`, `screen`, `nano`, `python3`, `nload`, `figlet`, `speedtest-cli`).

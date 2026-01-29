@@ -187,6 +187,6 @@ ufw reload
 
 ## Getting more help
 
-- **Repository:** [techamateur/SSH-Plus-Manager](https://github.com/techamateur/SSH-Plus-Manager)
+- **Repository:** [namnamir/SSH-Plus-Manager](https://github.com/namnamir/SSH-Plus-Manager)
 - **Usage and options:** [USAGE.md](USAGE.md)
 - **SSH multi-port and UFW:** [SSH-MULTIPORT.md](SSH-MULTIPORT.md)

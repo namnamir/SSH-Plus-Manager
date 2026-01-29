@@ -199,7 +199,7 @@ ufw reload
 
 ## نوشته‌های مرتبط
 
-- **مخزن:** [techamateur/SSH-Plus-Manager](https://github.com/techamateur/SSH-Plus-Manager)
+- **مخزن:** [namnamir/SSH-Plus-Manager](https://github.com/namnamir/SSH-Plus-Manager)
 - **استفاده و گزینه‌ها:** [USAGE.fa.md](USAGE.fa.md)
 - **چند پورت SSH و UFW:** [SSH-MULTIPORT.fa.md](SSH-MULTIPORT.fa.md)
 

@@ -2,7 +2,7 @@
 # Install/list – bootstrap installer: fetches manager modules from repo, sets dirs, hosts, crontab, version.
 
 # Repository URL
-_REPO_URL="https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main"
+_REPO_URL="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
 
 # Version: use repo root version (single source of truth)
 _lvk=$(wget -qO- --timeout=5 "$_REPO_URL/version" 2>/dev/null)

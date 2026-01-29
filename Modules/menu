@@ -256,7 +256,7 @@ menu() {
 		_ports="$_ssh_port"
 
 		# Version check for update availability (fetch and persist if missing)
-		_ver_repo="${_ver_repo:-https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main}"
+		_ver_repo="${_ver_repo:-https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main}"
 		[[ -f /etc/SSHPlus/repo_url ]] && [[ -s /etc/SSHPlus/repo_url ]] && _ver_repo=$(tr -d '\r\n' < /etc/SSHPlus/repo_url)
 		_ver_local=$(cat /etc/SSHPlus/version 2>/dev/null || cat /bin/version 2>/dev/null)
 		_ver_local="${_ver_local:-0}"

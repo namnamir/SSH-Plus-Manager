@@ -11,7 +11,7 @@
 #   --timezone TZ     Desired timezone (e.g. Asia/Tehran, used if --serversettings)
 #   --no-upgrade      Skip apt upgrade (only apt update + deps)
 
-_REPO_URL="https://raw.githubusercontent.com/techamateur/SSH-Plus-Manager/main"
+_REPO_URL="https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main"
 _SCRIPT_DIR=""
 # Try to detect script directory (works when run from file, not from curl pipe)
 # When run via curl pipe, $0 is /dev/fd/63 or similar, so skip detection
