@@ -34,6 +34,22 @@ if [[ -z "${SSHPLUS_FROM_REPO:-}" ]]; then
 fi
 [[ -z "${SSHPLUS_FROM_REPO:-}" ]] && [[ ! -e /usr/lib/sshplus ]] && exit 0
 
+# -------------------- Configuration: Refresh interval --------------------
+# Read refresh interval from config file, default to 30 seconds
+get_refresh_interval() {
+	local config_file="/etc/SSHPlus/refresh_interval"
+	local default_interval=30
+	if [[ -f "$config_file" ]] && [[ -s "$config_file" ]]; then
+		local interval
+		interval=$(tr -d '\r\n' < "$config_file" 2>/dev/null | grep -E '^[0-9]+$' | head -1)
+		if [[ -n "$interval" ]] && [[ "$interval" -ge 5 ]] && [[ "$interval" -le 300 ]]; then
+			echo "$interval"
+			return
+		fi
+	fi
+	echo "$default_interval"
+}
+
 # -------------------- Formatters --------------------
 fmt_bytes_compact() {
 	awk -v b="${1:-0}" 'BEGIN{
@@ -340,8 +356,10 @@ print_user_monitor_screen() {
 	local sep
 	sep=$(printf '%*s' "$cols" "" | tr ' ' '─')
 
-	# Title
-	printf "%bUSERS MONITORING%b%*s%bauto-refresh: 10s%b\n" "$(c ui_title)" "$(reset)" "$(( cols - 28 ))" "" "$(c ui_value)" "$(reset)"
+	# Title (show configured refresh interval)
+	local refresh_interval
+	refresh_interval=$(get_refresh_interval)
+	printf "%bUSERS MONITORING%b%*s%bauto-refresh: %ds%b\n" "$(c ui_title)" "$(reset)" "$(( cols - 28 ))" "" "$(c ui_value)" "$refresh_interval" "$(reset)"
 	printf "%b%s%b\n" "$(c ui_frame)" "$sep" "$(reset)"
 	echo ""
 
@@ -531,7 +549,7 @@ _monitor_handle_key() {
 	return 0
 }
 
-# Main loop: 10s refresh, keep state, Enter = back to menu
+# Main loop: configurable refresh interval, keep state, Enter = back to menu
 while true; do
 	clear
 	if [[ "${MONITOR_DETAILS:-0}" -eq 1 ]]; then
@@ -539,7 +557,9 @@ while true; do
 	else
 		print_user_monitor_screen
 	fi
-	read -r -t 10 -n 1 key 2>/dev/null || key=""
+	local refresh_interval
+	refresh_interval=$(get_refresh_interval)
+	read -r -t "$refresh_interval" -n 1 key 2>/dev/null || key=""
 	# Allow multi-char for "P" (Shift+p might send different byte)
 	[[ -z "$key" ]] && continue
 	_monitor_handle_key "$key" && continue

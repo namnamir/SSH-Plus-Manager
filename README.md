@@ -26,7 +26,7 @@ A terminal-based manager for SSH users and network services on Linux servers. Cr
 
 | Feature | Description |
 |--------|-------------|
-| **Monitor users** | Live table: online/offline/expired/expiring, connections, session time, down/up traffic, validity, last seen. Auto-refresh every 10s. |
+| **Monitor users** | Live table: online/offline/expired/expiring, connections, session time, down/up traffic, validity, last seen. Auto-refresh interval configurable (default: 30s). |
 | **VPS traffic** | Live network traffic view with `nload` (Ctrl+C to exit). |
 | **VPS info** | Hostname, IPv4/IPv6, OS, kernel, uptime, RAM/CPU/disk usage, listening ports, SSH/Dropbear/OpenVPN connection counts. |
 

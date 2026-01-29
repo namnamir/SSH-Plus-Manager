@@ -70,7 +70,8 @@ In submenus, **0** usually means “back” and **00** means “exit entirely”
 ### [03] MONITOR USERS
 
 - Table of users with: status (online/offline/expired/expiring), connections, session time, current/total traffic, validity (days), last connection, password.
-- Auto-refreshes every 10 seconds. Press Enter to return to the menu.
+- Auto-refreshes periodically (configurable, default: 30 seconds). Press Enter to return to the menu.
+- Configure refresh interval: [13] Server settings → [6] Auto-refresh interval
 
 ### [04] EXPIRATION DATE
 
