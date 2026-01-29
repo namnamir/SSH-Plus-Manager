@@ -363,8 +363,8 @@ menu() {
 		menu_option_n 3 "Change password"
 		printf "             "
 		menu_option 4 "Expiration manager"
-		menu_option_n 5 "Account limit"
-
+		menu_option 5 "Account limit"
+		
 		section "MONITORING"
 		menu_option_n 7 "Monitor users"
 		printf "               "

@@ -283,7 +283,7 @@ while true; do
 	menu_option 3 "Keyboard layout"
 	menu_option 4 "Server name"
 	menu_option 5 "Privacy (IP & banner logging)"
-	menu_option_n 6 "Auto-refresh interval"
+	menu_option 6 "Auto-refresh interval"
 	menu_option 0 "Back"
 	menu_option 00 "Exit"
 	echo ""

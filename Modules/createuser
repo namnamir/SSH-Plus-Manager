@@ -46,31 +46,24 @@ _get_ssh_port() {
 	echo "$port"
 }
 
-# Get all listening ports on the server
-_get_listening_ports() {
+# Get ports in use (LISTEN) the same way as the connections menu: lsof TCP LISTEN
+_get_ports_in_use() {
 	local ports=""
-	# Try ss first (modern, faster)
-	if command -v ss >/dev/null 2>&1; then
+	local PT
+	if command -v lsof >/dev/null 2>&1; then
+		PT=$(lsof -V -i tcp -P -n 2>/dev/null | grep -v "ESTABLISHED" | grep -v "COMMAND" | grep "LISTEN")
+		[[ -n "$PT" ]] && ports=$(echo -e "$PT" | cut -d: -f2 | cut -d' ' -f1 | sort -nu | uniq | tr '\n' ' ')
+	fi
+	# Fallback to ss/netstat if lsof not available or returned nothing
+	if [[ -z "$ports" ]] && command -v ss >/dev/null 2>&1; then
 		ports=$(ss -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$5); print $5}' | sort -nu | tr '\n' ' ')
 	fi
-	# Fallback to netstat if ss not available or returned nothing
 	if [[ -z "$ports" ]] && command -v netstat >/dev/null 2>&1; then
 		ports=$(netstat -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$4); print $4}' | sort -nu | tr '\n' ' ')
 	fi
 	# Trim trailing space
 	ports="${ports%"${ports##*[![:space:]]}"}"
 	echo "$ports"
-}
-
-# Check if a port is already in use
-_is_port_in_use() {
-	local check_port="$1"
-	[[ -z "$check_port" ]] && return 1
-	local listening_ports
-	listening_ports="$(_get_listening_ports)"
-	# Check if port exists in the space-separated list
-	[[ " $listening_ports " =~ " $check_port " ]] && return 0
-	return 1
 }
 
 # -------------------- npvt-ssh:// helpers --------------------
@@ -465,16 +458,17 @@ clear
 # -------------------- new Create User UX --------------------
 while true; do
 	title_line "CREATE USER"
+	printf "%b   %b0%b = Back   %b00%b = Exit\n\n" "$(c muted)" "$(c ui_value)" "$(c muted)" "$(c ui_value)" "$(reset)"
 
-	# Display open/listening ports (similar to main menu)
-	_listening_ports="$(_get_listening_ports)"
-	if [[ -n "$_listening_ports" ]]; then
-		printf "%b🔌 Open ports:%b %s\n" "$(c ui_label)" "$(reset)" "$(c ui_value)$_listening_ports$(reset)"
+	# Display ports in use (same source as connections menu) – use one of these in your config
+	_ports_in_use="$(_get_ports_in_use)"
+	if [[ -n "$_ports_in_use" ]]; then
+		printf "%b🔌 Ports you can use in config (listening):%b %s\n" "$(c ui_label)" "$(reset)" "$(c ui_value)$_ports_in_use$(reset)"
 		echo ""
 	fi
 
-	# Username
-	printf "%b👤 Username:%b " "$(c ui_label)" "$(reset)"
+	# Username (0 = Back, 00 = Exit to cancel)
+	printf "%b👤 Username:%b (0=Back 00=Exit) " "$(c ui_label)" "$(reset)"
 	read -r username
 	username="${username//[[:space:]]/}"
 	[[ "$username" == "0" ]] && exit 0
@@ -540,13 +534,6 @@ while true; do
 	if ! _is_int "$ssh_port" || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
 		msg_err "Invalid port. Must be a number between 1 and 65535."
 		sleep 1
-		clear
-		continue
-	fi
-	# Check if port is already in use
-	if _is_port_in_use "$ssh_port"; then
-		msg_err "Port $ssh_port is already in use on this server. Please choose a different port."
-		sleep 2
 		clear
 		continue
 	fi
