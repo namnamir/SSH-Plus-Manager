@@ -46,6 +46,33 @@ _get_ssh_port() {
 	echo "$port"
 }
 
+# Get all listening ports on the server
+_get_listening_ports() {
+	local ports=""
+	# Try ss first (modern, faster)
+	if command -v ss >/dev/null 2>&1; then
+		ports=$(ss -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$5); print $5}' | sort -nu | tr '\n' ' ')
+	fi
+	# Fallback to netstat if ss not available or returned nothing
+	if [[ -z "$ports" ]] && command -v netstat >/dev/null 2>&1; then
+		ports=$(netstat -tuln 2>/dev/null | awk '/LISTEN/ {gsub(/.*:/,"",$4); print $4}' | sort -nu | tr '\n' ' ')
+	fi
+	# Trim trailing space
+	ports="${ports%"${ports##*[![:space:]]}"}"
+	echo "$ports"
+}
+
+# Check if a port is already in use
+_is_port_in_use() {
+	local check_port="$1"
+	[[ -z "$check_port" ]] && return 1
+	local listening_ports
+	listening_ports="$(_get_listening_ports)"
+	# Check if port exists in the space-separated list
+	[[ " $listening_ports " =~ " $check_port " ]] && return 0
+	return 1
+}
+
 # -------------------- npvt-ssh:// helpers --------------------
 _json_escape() {
 	# Minimal JSON string escaping for remarks/host/user/pass fields.
@@ -439,6 +466,13 @@ clear
 while true; do
 	title_line "CREATE USER"
 
+	# Display open/listening ports (similar to main menu)
+	_listening_ports="$(_get_listening_ports)"
+	if [[ -n "$_listening_ports" ]]; then
+		printf "%b🔌 Open ports:%b %s\n" "$(c ui_label)" "$(reset)" "$(c ui_value)$_listening_ports$(reset)"
+		echo ""
+	fi
+
 	# Username
 	printf "%b👤 Username:%b " "$(c ui_label)" "$(reset)"
 	read -r username
@@ -504,8 +538,15 @@ while true; do
 	ssh_port="$(_trim "$ssh_port")"
 	[[ -z "$ssh_port" ]] && ssh_port="$_default_port"
 	if ! _is_int "$ssh_port" || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
-		msg_err "Invalid port."
+		msg_err "Invalid port. Must be a number between 1 and 65535."
 		sleep 1
+		clear
+		continue
+	fi
+	# Check if port is already in use
+	if _is_port_in_use "$ssh_port"; then
+		msg_err "Port $ssh_port is already in use on this server. Please choose a different port."
+		sleep 2
 		clear
 		continue
 	fi
