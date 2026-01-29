@@ -78,7 +78,7 @@ _json_escape() {
 }
 
 _build_npvt_json() {
-	# Prints single-line JSON exactly (no trailing newline)
+	# npvt-ssh import format: single-line JSON (sshConfigType SSH-Direct, host, port, user, pass, etc.)
 	# Args: remarks host port username password sni tlsVersion dnsTTMode udpgwPort
 	local remarks="$1" ssh_host="$2" ssh_port="$3" username="$4" password="$5"
 	local sni="${6:-}" tlsVersion="${7:-DEFAULT}" dnsTTMode="${8:-UDP}" udpgwPort="${9:-7300}"
@@ -166,6 +166,25 @@ _print_kv_aligned() {
 		"$(c ui_label)" "$key" "$(reset)" \
 		"$(c ui_value)" "$value" "$(reset)"
 }
+
+# Mask password for display: first 2 + • (middle) + last 1–2 chars (same as sshmonitor)
+_mask_password() {
+	local raw="${1:-}"
+	[[ -z "$raw" ]] && echo "" && return
+	local len=${#raw}
+	if [[ $len -le 4 ]]; then
+		echo "••••"
+		return
+	fi
+	local first="${raw:0:2}" last="${raw: -2}"
+	[[ $len -lt 6 ]] && last="${raw: -1}"
+	local mid_len=$(( len - 4 ))
+	[[ $mid_len -lt 0 ]] && mid_len=0
+	local dots
+	printf -v dots '%*s' "$mid_len" ''; dots="${dots// /•}"
+	echo "${first}${dots}${last}"
+}
+
 # Legacy ANSI vars (prefer msg_err/banner_info from colors); remove if unused
 cor1='\033[41;1;37m'
 cor2='\033[44;1;37m'
@@ -626,29 +645,59 @@ sshplus_with_db_lock sshplus_db_put_user \
 config_json="$(_build_npvt_json "$remarks" "$ssh_host" "$ssh_port" "$username" "$password" "$sni" "$tlsVersion" "$dnsTTMode" "$udpgwPort")"
 import_link="$(_npvt_link_from_json "$config_json" 2>/dev/null || true)"
 
-# Result screen (copy-friendly)
-clear
-title_line "SSH ACCOUNT CREATED"
-echo ""
-_print_kv_aligned "🌍" "Host:" "$ssh_host"
-_print_kv_aligned "🔌" "Port:" "$ssh_port"
-_print_kv_aligned "👤" "Username:" "$username"
-_print_kv_aligned "🔒" "Password:" "$password"
-_print_kv_aligned "🔖" "Remark:" "$remarks"
-_print_kv_aligned "⏳" "Expires in:" "${gui} (${dias}d)"
-_print_kv_aligned "🔗" "Conn limit:" "$sshlimiter"
+# Result screen: interactive [p] password mask, [l] import link/config visibility, [Enter] continue
+show_pass_plain=0
+show_link=0
+_result_redraw() {
+	clear
+	title_line "SSH ACCOUNT CREATED"
+	echo ""
+	_print_kv_aligned "🌍" "Host:" "$ssh_host"
+	_print_kv_aligned "🔌" "Port:" "$ssh_port"
+	_print_kv_aligned "👤" "Username:" "$username"
+	if [[ "$show_pass_plain" -eq 1 ]]; then
+		_print_kv_aligned "🔒" "Password:" "$password"
+	else
+		_print_kv_aligned "🔒" "Password:" "$(_mask_password "$password")"
+	fi
+	_print_kv_aligned "🔖" "Remark:" "$remarks"
+	_print_kv_aligned "⏳" "Expires in:" "${gui} (${dias}d)"
+	_print_kv_aligned "🔗" "Conn limit:" "$sshlimiter"
 
-echo ""
-printf "%bImport link:%b\n" "$(c ui_label)" "$(reset)"
-if [[ -n "${import_link:-}" ]]; then
-	printf "%s\n" "$import_link"
-else
-	msg_warn "Could not generate import link (missing base64/openssl)."
-fi
+	echo ""
+	printf "%bImport link:%b " "$(c ui_label)" "$(reset)"
+	if [[ "$show_link" -eq 1 ]]; then
+		if [[ -n "${import_link:-}" ]]; then
+			printf "%s\n" "$import_link"
+		else
+			msg_warn "Could not generate import link (missing base64/openssl)."
+		fi
+	else
+		printf "%b[Press l to reveal]%b\n" "$(c muted)" "$(reset)"
+	fi
 
-echo ""
-printf "%bConfig JSON:%b\n" "$(c ui_label)" "$(reset)"
-printf "%s\n" "$config_json"
+	echo ""
+	printf "%bConfig JSON:%b " "$(c ui_label)" "$(reset)"
+	if [[ "$show_link" -eq 1 ]]; then
+		printf "%s\n" "$config_json"
+	else
+		printf "%b[Press l to reveal]%b\n" "$(c muted)" "$(reset)"
+	fi
+
+	echo ""
+	printf "%bKeys:%b [p] Toggle password  [l] Toggle import link  [Enter] Continue\n" "$(c ui_muted)" "$(reset)"
+}
+
+_result_redraw
+while true; do
+	key=""
+	read -n 1 -s key 2>/dev/null || read -r key
+	case "$key" in
+		p|P) show_pass_plain=$(( 1 - show_pass_plain )); _result_redraw ;;
+		l|L) show_link=$(( 1 - show_link )); _result_redraw ;;
+		''|$'\r') break ;;
+	esac
+done
 
 if [[ -e /etc/openvpn/server.conf ]]; then
 	printf "\n%b📦 Generate OpenVPN file now? [y/N]:%b " "$(c ui_prompt)" "$(reset)"
