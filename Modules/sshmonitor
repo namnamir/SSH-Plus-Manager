@@ -67,7 +67,7 @@ fmt_last_seen() {
 	local epoch now_sec d dt
 	epoch=$(date -d "$v" +%s 2>/dev/null) || { echo "never"; return; }
 	now_sec=$(date +%s 2>/dev/null) || now_sec=0
-	[[ -z "${now_sec:-}" || ! "${now_sec}" =~ ^[0-9]+$ ]] && now_sec=0
+	[[ -z "${now_sec:-}" || ! "${now_sec:-0}" =~ ^[0-9]+$ ]] && now_sec=0
 	d=$(( (now_sec - epoch) / 86400 ))
 	dt=$(date -d "@$epoch" +"%d/%m %H:%M" 2>/dev/null) || dt="?"
 	echo "${dt} (${d}d)"
@@ -468,27 +468,27 @@ print_user_monitor_screen() {
 			conn_lines="${_L_connections[$u]:-}"
 
 			if [[ "$now_count" -gt 0 ]]; then
-				# One line per connection (split 2+ connections into separate rows)
-				if [[ -n "$conn_lines" ]]; then
+				local now_traffic_str now_time_str
+				now_traffic_str="Σ $(fmt_bytes_compact "$now_down")/$(fmt_bytes_compact "$now_up")"
+				now_time_str=$(_sec_to_hms "$now_time_sec")
+				if [[ -z "$conn_lines" ]]; then
+					# No per-connection data (e.g. OpenVPN-only): one summary line only
+					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
+				elif [[ -n "${MONITOR_EXPANDED[$u]:-}" ]]; then
+					# Expanded: summary line + one row per session (↳ #1, #2, …)
+					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
 					local idx=0
 					while IFS= read -r line; do
 						[[ -z "$line" ]] && continue
 						((idx++)) || true
-						local slot down up t_sec now_traffic_str now_time_str
+						local slot down up t_sec
 						IFS='|' read -r slot down up t_sec <<<"$line"
 						now_traffic_str="$(fmt_bytes_compact "$down")/$(fmt_bytes_compact "$up")"
 						now_time_str=$(_sec_to_hms "${t_sec:-0}")
-						if [[ $idx -eq 1 ]]; then
-							printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
-						else
-							printf "   ↳ #%-8s %5s/%s   %-14s %-10s now\n" "$idx" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str"
-						fi
+						printf "   ↳ #%-8s %5s/%s   %-14s %-10s now\n" "$idx" "$idx" "$max_conn" "$now_traffic_str" "$now_time_str"
 					done <<<"$conn_lines"
 				else
-					# No per-connection data (e.g. OpenVPN-only): one summary line
-					local now_traffic_str now_time_str
-					now_traffic_str="Σ $(fmt_bytes_compact "$now_down")/$(fmt_bytes_compact "$now_up")"
-					now_time_str=$(_sec_to_hms "$now_time_sec")
+					# Collapsed: single summary line (same as OpenVPN)
 					printf "%s %-10s %5s/%s   %-14s %-10s %s\n" "$icon" "$u" "$now_count" "$max_conn" "$now_traffic_str" "$now_time_str" "now"
 				fi
 			else
@@ -506,7 +506,11 @@ print_user_monitor_screen() {
 	echo ""
 	# Footer: show [e] Expand only when there are active users (spec)
 	if [[ "$n_active" -gt 0 ]]; then
-		printf "%bKeys: [Enter] Back  [d] Details  [e] Expand  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
+		if [[ "${MONITOR_EXPAND:-0}" -eq 1 ]]; then
+			printf "%bKeys: [Enter] Back  [d] Details  [e] Expand (on)  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
+		else
+			printf "%bKeys: [Enter] Back  [d] Details  [e] Expand  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
+		fi
 	else
 		printf "%bKeys: [Enter] Back  [d] Details  [f] Filter  [s] Sort  [q] Quit%b\n" "$(c ui_muted)" "$(reset)"
 	fi
