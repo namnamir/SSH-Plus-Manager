@@ -15,18 +15,17 @@ A terminal-based manager for SSH users and network services on Linux servers. Cr
 | Feature | Description |
 |--------|-------------|
 | **Create user** | Add SSH users with password, expiration date, and connection limit. Supports OpenVPN (.ovpn) generation. |
-| **Remove user** | Remove one user or all users; removes the user’s record from the centralized `$HOME/users.db` and cleans OpenVPN certs. |
-| **User info** | List all users with password, connection limit, and validity (days left or expired). |
-| **Change password** | Change a user’s password via the service (`chpasswd`) and keep `$HOME/users.db` in sync. |
-| **Change expiration** | Set or change account expiration date per user. |
-| **Change limit** | Set max simultaneous connections per user (stored in `$HOME/users.db`). |
-| **Expired users** | List accounts past expiration and remove them in one go. |
+| **Remove user** | Remove one user or all users; removes the user's record from the centralized `users.db` and cleans OpenVPN certs. |
+| **Change password** | Change a user's password via the service (`chpasswd`) and keep `users.db` in sync. |
+| **Expiration manager** | View all users with expiration status, change expiration dates, list/remove expired users — all in one screen. |
+| **Account limit** | Set max simultaneous connections per user (stored in `users.db`). |
 
 ### Monitoring and traffic
 
 | Feature | Description |
 |--------|-------------|
-| **Monitor users** | Live table: online/offline/expired/expiring, connections, session time, down/up traffic, validity, last seen. Auto-refresh interval configurable (default: 30s). |
+| **Monitor users** | Live table: online/offline/expired/expiring, connections, session time, down/up traffic, validity, last seen. Expand to see individual connections. Auto-refresh interval configurable. |
+| **Speedtest** | Run download/upload speed test (uses `speedtest-cli`). |
 | **VPS traffic** | Live network traffic view with `nload` (Ctrl+C to exit). |
 | **VPS info** | Hostname, IPv4/IPv6, OS, kernel, uptime, RAM/CPU/disk usage, listening ports, SSH/Dropbear/OpenVPN connection counts. |
 
@@ -41,18 +40,17 @@ A terminal-based manager for SSH users and network services on Linux servers. Cr
 
 | Feature | Description |
 |--------|-------------|
-| **Speedtest** | Run download/upload speed test (uses `speedtest-cli`). |
-| **Banner** | Set SSH login banner (e.g. IP, welcome text; uses `figlet`). |
-| **Backup** | Back up user/list and manager-related data. |
-| **Reboot system** | Reboot the server (with confirmation). |
 | **Restart services** | Restart SSH (and related) services. |
-| **Root password** | Change the root password (with confirmation). |
+| **Reboot system** | Reboot the server (with confirmation). |
+| **Server settings** | Change root password, timezone, keyboard layout, server name, privacy/logging settings, and auto-refresh interval. |
+| **Banner** | Set SSH login banner (e.g. IP, welcome text; uses `figlet`). |
+| **Backup** | Back up user list and manager-related data. |
 
 ### Manager lifecycle
 
 | Feature | Description |
 |--------|-------------|
-| **Auto run** | Toggle “run `menu` on login” (add/remove `menu;` in `/etc/profile`). |
+| **Auto run** | Toggle "run `menu` on login" (add/remove from `/etc/profile`). |
 | **Update script** | Check repo version and update all manager files from the repository. |
 | **Remove script** | Uninstall manager scripts (with double confirmation). |
 
@@ -99,35 +97,35 @@ In submenus, **0** = back, **00** = exit.
 ```
 SSH-Plus-Manager/
 ├── install.sh          # One-line installer: deps, download Install/list, run bootstrap
-├── version              # Version string (e.g. 1.0.0) for update checks
+├── version             # Version string (e.g. 1.0.0) for update checks
 ├── Install/
-│   └── list             # Bootstrap: download Modules, dirs, hosts, crontab, version
+│   └── list            # Bootstrap: download Modules, dirs, hosts, crontab, version
 ├── Modules/
-│   ├── menu             # Main loop; sources colors, shows dashboard, dispatches to scripts
-│   ├── colors           # UI: msg_ok/msg_err/msg_warn/msg_info, banner_info/banner_danger, color_echo, menu_option, c(), hr, kv
-│   ├── createuser       # [01] Create SSH user + optional OpenVPN
-│   ├── removeuser       # [02] Remove one or all users
-│   ├── sshmonitor       # [03] Live user/connection/traffic monitor
-│   ├── changeexpiration # [04] Change user expiration date
-│   ├── changelimit      # [05] Change connection limit per user
-│   ├── changepassword   # [06] Change user password
-│   ├── expiredusers     # [07] Remove expired users
-│   ├── connections      # [08] OpenSSH/Squid/Dropbear/OpenVPN/SOCKS/SSL/SSLH
+│   ├── menu            # Main loop; sources colors, shows dashboard, dispatches to scripts
+│   ├── colors          # UI: msg_ok/msg_err/msg_warn/msg_info, banner_info/banner_danger, color_echo, menu_option, c(), hr, kv
+│   ├── db              # Centralized user database helpers
+│   ├── createuser      # [01] Create SSH user + optional OpenVPN
+│   ├── removeuser      # [02] Remove one or all users
+│   ├── changepassword  # [03] Change user password
+│   ├── expirationmanager # [04] Manage user expirations (view, change, remove expired)
+│   ├── changelimit     # [05] Change connection limit per user
+│   ├── sshmonitor      # [07] Live user/connection/traffic monitor
+│   ├── speedtest       # [08] speedtest-cli
+│   ├── vpstraffic      # [09] nload
+│   ├── vpsinfo         # [10] System info
+│   ├── restartservices # [11] Restart SSH
+│   ├── rebootsystem    # [12] Reboot
+│   ├── serversettings  # [13] Root password, timezone, keyboard, server name, privacy, refresh
+│   ├── removescript    # [14] Uninstall
+│   ├── connections     # [15] OpenSSH/Squid/Dropbear/OpenVPN/SOCKS/SSL/SSLH
 │   ├── multiport       # Called from connections: SSH multi-port (sshd + systemd + UFW)
-│   ├── speedtest       # [09] speedtest-cli
-│   ├── bannersetup      # [10] SSH banner
-│   ├── vpstraffic       # [11] nload
-│   ├── userbackup       # [12] Backup
-│   ├── vpsinfo          # [13] System info
-│   ├── rebootsystem     # [14] Reboot
-│   ├── restartservices  # [15] Restart SSH
-│   ├── rootpassword     # [16] Root password
-│   ├── autorun          # [17] Menu on login
-│   ├── updatescript     # [18] Update from repo
-│   ├── removescript     # [19] Uninstall
-│   ├── open.py          # SOCKS over OpenVPN (used by connections)
-│   └── proxy.py         # SOCKS over SSH (used by connections)
-├── docs/                # USAGE, TROUBLESHOOTING, SSH-MULTIPORT (+ Persian)
+│   ├── bannersetup     # [16] SSH banner
+│   ├── userbackup      # [17] Backup
+│   ├── autorun         # [18] Menu on login
+│   ├── updatescript    # [19] Update from repo
+│   ├── open.py         # SOCKS over OpenVPN (used by connections)
+│   └── proxy.py        # SOCKS over SSH (used by connections)
+├── docs/               # USAGE, TROUBLESHOOTING, SSH-MULTIPORT (+ Persian)
 └── README.md
 ```
 
@@ -135,7 +133,7 @@ Installed layout (after `install.sh` + `Install/list`):
 
 - Scripts in `/bin/` (e.g. `/bin/menu`, `/bin/createuser`).
 - `colors`, `db`, `open.py`, `proxy.py` in `/etc/SSHPlus/`.
-- User DB (single source of truth): `$HOME/users.db` (8 fields per user).
+- User DB (single source of truth): `$HOME/users.db` (9 fields per user).
 - Session audit log (append-only): `$HOME/sessions.log`.
 
 ---
