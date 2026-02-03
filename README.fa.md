@@ -61,5 +61,62 @@
 **یکی** از این دستورات را روی سرور خود به‌عنوان **root** اجرا کنید (اولی اگر `curl` دارید، دومی اگر `wget` دارید):
 
 ```bash
-# با curl:
+# curl:
 bash <(curl -Ls https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh)
+````
+
+```bash
+# wget:
+wget -qO- https://raw.githubusercontent.com/namnamir/SSH-Plus-Manager/main/install.sh | bash
+```
+
+**نیازمندی‌ها:** دسترسی root، `curl` یا `wget` و یک سیستم مبتنی بر Debian/Ubuntu. نصب‌کننده وابستگی‌ها را نصب می‌کند (مانند `wget`، `curl`، `screen`، `nano`، `python3`، `nload`، `figlet`، `speedtest-cli`).
+
+---
+
+## استفاده
+
+پس از نصب، دستور زیر را اجرا کنید:
+
+```bash
+menu
+```
+
+یا نام مستعار کوتاه:
+
+```bash
+h
+```
+
+در زیرمنوها، **0** = بازگشت، **00** = خروج.
+
+---
+
+## ساختار پروژه
+
+چیدمان نصب‌شده (پس از `install.sh` + `Install/list`):
+
+* اسکریپت‌ها: `/bin/` (مثلا `/bin/menu`، `/bin/createuser`).
+* ماژول‌ها: `colors`، `db`، `open.py`، `proxy.py` در `/etc/SSHPlus/`.
+* پایگاه داده: `$HOME/users.db` (۹ فیلد برای هر کاربر).
+* لاگ نشست‌ها (فقط افزایشی): `$HOME/sessions.log`.
+* اطلاعات بیشتر در **[README.md](README.md)**
+---
+
+## مستندات
+
+* همه گزینه‌های منو و رفتارها: **[docs/USAGE.fa.md](docs/USAGE.fa.md)**
+* مشکلات رایج و راه‌حل‌ها: **[docs/TROUBLESHOOTING.fa.md](docs/TROUBLESHOOTING.fa.md)**
+* راه‌اندازی SSH چندپورته (systemd + UFW): **[docs/SSH-MULTIPORT.fa.md](docs/SSH-MULTIPORT.fa.md)**
+
+---
+
+## مشارکت
+
+لطفاً قراردادهای **[README.md](README.md)** را دنبال کنید تا پروژه منسجم و قابل نگهداری بماند.
+
+---
+
+## مجوز
+
+این پروژه تحت مجوز MIT منتشر شده است — برای جزئیات فایل [LICENSE](LICENSE) را ببینید.
